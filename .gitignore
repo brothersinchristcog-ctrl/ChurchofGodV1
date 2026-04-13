@@ -1,0 +1,12 @@
+# Monorepo root gitignore
+node_modules/
+.env
+.env.local
+.expo/
+*.log
+dist/
+build/
+.DS_Store
+C:/Users/sunil/COG_MOBILE/app/web-build/
+C:/Users/sunil/COG_MOBILE/admin/dist/
+C:/Users/sunil/COG_MOBILE/functions/lib/
