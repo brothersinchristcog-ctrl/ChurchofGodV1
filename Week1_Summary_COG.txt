@@ -1,0 +1,40 @@
+# CHURCH OF GOD MOBILE APP - WEEK 1 SUMMARY (COMPLETED & VERIFIED)
+
+This document summarizes the foundational architecture built during the Week 1 Sprint.
+
+1. PROJECT REPOSITORY & INFRASTRUCTURE
+-------------------------------------
+*   Created a MONOREPO structure (/app, /admin, /functions).
+*   Initialized Git and linked to Official GitHub:
+    https://github.com/brothersinchristcog-ctrl/ChurchofGod.git
+*   Established a professional Branch Strategy (main, develop, feature).
+*   CI/CD: Automated code quality checks are active.
+
+2. MOBILE APP FOUNDATION
+-----------------------
+*   DESIGN SYSTEM: Implemented Navy (#1a2d5a), Crimson (#c0392b), and Gold (#f0a500).
+*   NAVIGATION: Professional bottom navigation bar (Home, Promise, Prayer, Give, Profile).
+*   BRANDING: App name updated to "Church of God".
+
+3. CLOUD & INTEGRATION
+---------------------
+*   FIREBASE: Initialized Firestore and Auth. Rules drafted.
+*   SALESFORCE: External Client App created; Consumer Key/Secret stored in .env.
+*   PHONEPE (SIMPLE): Added UPI ID: 8374331432@ybl for easy donation testing.
+
+4. DEFERRED TASKS & TIMING (IMPORTANT)
+-------------------------------------
+We have purposefully delayed two items for better efficiency:
+
+*   ITEM 1.1.2: SHA-1 Key Registration
+    -> WHEN: Week 4 (Testing Phase).
+    -> WHY: Requires the Android keystore which is created once we do our first "Physical Phone" build.
+
+*   ITEM 1.1.5: PhonePe FULL Payment Gateway Integration
+    -> WHEN: Week 6 (Giving & Donations Sprint).
+    -> WHY: We are using the "Simple UPI" (8374331432@ybl) for now while your Merchant Account documents are being processed by the PhonePe team.
+
+STATUS: WEEK 1 TECHNICAL FOUNDATION 100% SECURE. 
+--------------------------------------------------
+DATE: April 14, 2026
+--------------------------------------------------

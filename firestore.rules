@@ -1,0 +1,59 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper: Is the user logged in?
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper: Is this the user's own document?
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // --- COLLECTIONS ---
+
+    // 1. Users
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+    }
+
+    // 2. Daily Promises & Videos (Publicly readable by members)
+    match /dailyPromises/{promiseId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Only via Admin Portal (TBD)
+    }
+    match /dailyVideos/{videoId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    // 3. Events (RSVP count can be updated)
+    match /events/{eventId} {
+      allow read: if isAuthenticated();
+      allow write: if false; 
+    }
+
+    // 4. Prayer Requests
+    match /prayerRequests/{reqId} {
+      // Public prayers can be read by all. Private only by owner.
+      allow read: if isAuthenticated() && (resource.data.type == 'public' || isOwner(resource.data.uid));
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isOwner(resource.data.uid);
+    }
+
+    // 5. Announcements
+    match /announcements/{id} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    // 6. Giving Transactions (Strict privacy)
+    match /givingTransactions/{txId} {
+      allow read, write: if isOwner(resource.data.uid);
+    }
+  }
+}
