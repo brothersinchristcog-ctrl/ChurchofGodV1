@@ -1,29 +1,40 @@
 /**
  * Church of God (COG) Mobile App
  * Design System & Theme Configuration
+ * High-Fidelity Navy, Gold, and Red Palette
  */
 
 export const Colors = {
-  // BRAND COLORS
-  primary: '#1a2d5a', // Deep Navy
-  accent: '#c0392b',  // Vibrant Red
-  gold: '#f0a500',    // Golden Yellow
+  // ── BRAND IDENTITY ──
+  primary: '#1a2d5a',      // Deep Navy (Headers, Branding)
+  primaryLight: '#2c3e6b', // Lighter Navy for Gradients
+  primarySub: '#aac4e8',   // Light Navy for Subtitles
   
-  // UI COLORS
-  background: '#f8f9fa',
-  surface: '#ffffff',
-  text: '#1a1a1a',
-  textSecondary: '#6c757d',
-  border: '#e9ecef',
+  accent: '#c0392b',       // Signature Crimson Red (Actions, Buttons)
+  accentLight: '#e74c3c',  // Lighter Red for Hover/Highlights
   
-  // STATUS COLORS
-  success: '#27ae60',
-  error: '#e74c3c',
-  pending: '#f39c12',
+  gold: '#fbbf24',         // Premium Amber Gold (Highlights, Badges)
+  goldLight: '#fef3c7',    // Soft Gold for Surface Tints
   
-  // TRANSPARENTS
-  overlay: 'rgba(0, 0, 0, 0.5)',
-  whiteAlpha: 'rgba(255, 255, 255, 0.8)',
+  // ── SURFACE & UI ──
+  background: '#f0f2f7',   // Main Screen Background
+  surface: '#ffffff',      // Card & Container Background
+  border: '#e5e7eb',       // Light UI Borders
+  
+  // ── TYPOGRAPHY ──
+  text: '#111827',         // Main Body Text
+  textSecondary: '#6b7280',// Descriptions & Meta Data
+  textMuted: '#9ca3af',    // Hint & Placeholder Text
+  
+  // ── STATUS ──
+  success: '#15803d',
+  error: '#dc2626',
+  warning: '#b45309',
+  info: '#1e40af',
+  
+  // ── TRANSPARENCIES ──
+  overlay: 'rgba(26, 45, 90, 0.85)',
+  whiteAlpha: 'rgba(255, 255, 255, 0.1)',
 };
 
 export const Spacing = {
@@ -35,26 +46,27 @@ export const Spacing = {
   xxl: 48,
 };
 
-export const Typography = {
-  // We will use Google Fonts 'Inter'
-  fonts: {
-    regular: 'Inter-Regular',
-    medium: 'Inter-Medium',
-    bold: 'Inter-Bold',
+export const Shadows = {
+  soft: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
   },
-  sizes: {
-    h1: 32,
-    h2: 24,
-    h3: 20,
-    body: 16,
-    caption: 12,
-  },
+  premium: {
+    shadowColor: '#1a2d5a',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+  }
 };
 
 export const Theme = {
   Colors,
   Spacing,
-  Typography,
+  Shadows,
 };
 
 export default Theme;

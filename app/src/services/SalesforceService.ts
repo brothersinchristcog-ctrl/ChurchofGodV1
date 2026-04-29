@@ -1,0 +1,1026 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Buffer } from 'buffer';
+import forge from 'node-forge';
+
+const CACHE_KEYS = {
+  PROMISE: 'cog_promise_cache',
+  SERMONS: 'cog_sermons_cache',
+  EVENTS: 'cog_events_cache',
+  NOTIFICATIONS: 'cog_notifications_cache',
+  USER_CONTACT: 'cog_user_contact'
+};
+
+export interface DailyPromise {
+  id?: string;
+  verse: string;
+  verseTelugu?: string;
+  date: string;
+  devotionalNote?: string;
+  pastor?: string;
+  status?: string;
+  youtubeId?: string;
+  verseReference?: string;
+}
+
+export interface SalesforceMember {
+  id: string;
+  name: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  userType?: string;
+  mailingCity?: string;
+  mailingState?: string;
+  mailingStreet?: string;
+  joinDate?: string;
+  mobileAppId?: string;
+}
+
+export interface SalesforceVideo {
+  id: string;
+  title: string;
+  youtubeId: string;
+  date: string;
+  duration?: string;
+  pastor?: string;
+}
+
+export interface WorshipSong {
+  id: string;
+  title: string;
+  artist: string;
+  key: string;
+}
+
+export interface ScheduleEvent {
+  id: string;
+  title: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+  description: string;
+  category: string;
+  image: string;
+}
+
+export interface Sermon {
+  id: string;
+  title: string;
+  titleTelugu?: string;
+  youtubeId: string;
+  date: string;
+  pastor: string;
+  duration: string;
+  description?: string;
+  scripture?: string;
+  viewCount?: number;
+}
+
+class SalesforceService {
+  private clientId = '3MVG9Wr8x2TEhDdL_5qb5mNUub8Jqz_jDMq7iRrn5XvkZHBhdkxGxFk0cf3r3hvccLtdznbxghdx50uUOrh14';
+  private username = 'sakibandasunilbabu@bic.com.cog';
+  private loginUrl = 'https://kristhunandusahodarulusahavasam--cog.sandbox.my.salesforce.com';
+  private instanceUrl = 'https://kristhunandusahodarulusahavasam--cog.sandbox.my.salesforce.com';
+
+  private privateKeyPem = `-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCsg48JgGqGZGfd
+vlZob6Gb1saVVwSw9+gyjfDaK/s0wrCS2p1J6yQiUcxMv1wmOPIG8nj0N+N3zcOR
+HUMODubkBRl5WwPb2WnK9DC5YyETwPdc5AmT3rG/URzCSUZl7snMeH0x/2gTRUB8
+TaAlCoquvEVgf2Q+HWC3ntxBxN6QH9KdK1F+SAz5jVyWLc/78L0mq3d8Ees3f7z4
+sBO+amaZDE17OpcO2I8cWRTlwmYlYfr9C08a7Waxjjn1xtCa6zFRYVzL7FrVxozr
+k1VV1Udj2CsuTgOck1IPYTue1/n8xtqBT/QNFO1Vmci3d6v7D9pDzwiCOoeLDzsU
+B5ImhD3RAgMBAAECggEAJAxXks41NED93T2dM7SD6hsOov0se0hKSmoTlptTIjq+
+h+lLrbsHcW5zSORBvrDujhoTwUB+dTXXdFbPgLwHbkVMhenJXCLJswGkvtBihIyx
+g8UY5T/HF6m83zJNlhY4L9RLoOt0VXaGm5Li8GqMAShRPPFRwpMD90qoTsvzD91m
+JLNofovP3GoBeeSnhBeLFe+ZSdGgNE9mnKWOHPh5jqd9O1XsRNpFp8M9WlkiTarG
+WviAd63maQUPqXU7K5k21NNk/s69Vo7eH/lvpcOLxAdxS8D1yibvD4dcGTN+K8iW
+Ust/grHhcDFHNX/wv/Na30aXX/BwzSBcEWnuofNoMwKBgQDpowBzwi/JBXJvF12O
+FdKRw8U5Qxus9jN2f9jv4mrrXipiv3DL3RPBeE5fAAv3imUbfAA7NR9QMhbqWRYg
+vd6+987e4fAqSWKFpsxj1xNV8ERsxY+SXhm9bb+82bBxAy3xoO5heIsrjCvaSVT8
+PKFKILyi7Q3AJOGrc9+8ucAqmwKBgQC9BtAO4/jQrM0BXlvhwyQVK1kJVvnjVJZ7
+KyMdkYe9H2bn1HhmUYKBk2NE/HG/sVpvLcQLBi9Um+ixn1i/7KtYCbCqrnXOxm49
+tR2KEaE/WLEYl8p/usFg/auiVWlZMFsA8l4lW+rIp8beQUljEu88Ebv0YgEpguz/
+uepZddAaAwKBgEQQ1e/jkfJZoOYWg44Cc4893rZ5A5YXQBT02CnC5+1cSLLuHRl3
+der2dracl9/tNNmV/adCKbY+cYiinZy6VCuEnIM4hbR8HrTbTE6F+T8fOYAK6nH0
+8kDKuYJ2VT4HdBoiDXDeIoV0V85HcPfvXfnvoaVBtLDWzdwabQNZhk+jAoGAZSeD
+KaTHnuwKHORg6RSjd4yl7gCUYxn+GVWBSi555DQsvn0OHTsbSroT0nQBbyK6kWp9
+UaTyqSVxxbPPK428N7WfzAbmVkwL7IvCjgNXNe4Bf3ajT+0h1QSK16k7YhYlbQFG
+blmc79oQ6xkm65TTX2LiISpdEtjUeRkFlvAb9/8CgYEAl0kYCY18F36/eUeuGQwx
+WsgAVnEB9vQtJHUDhjBPPyTxXgvnTdnO6oDAAH6j5iAbMlVTvjM4eRgVEG60xlTs
+tB0Mj+4RZO3hhi+3CxIbTmyzDEvKIV4gpjFu8Ug2JMpIDheHnZ1eyq7Byp09m1N2
+spfkUchVp71l4aWpCW50lro=
+-----END PRIVATE KEY-----`;
+
+  private async getAccessToken(): Promise<string> {
+    try {
+      const header = { alg: 'RS256', typ: 'JWT' };
+      const now = Math.floor(Date.now() / 1000);
+      const claimSet = { iss: this.clientId, sub: this.username, aud: this.loginUrl, exp: now + 300 };
+      const base64UrlEncode = (str: string) => Buffer.from(str).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+      const encodedHeader = base64UrlEncode(JSON.stringify(header));
+      const encodedPayload = base64UrlEncode(JSON.stringify(claimSet));
+      const signatureInput = `${encodedHeader}.${encodedPayload}`;
+      const md = forge.md.sha256.create().update(signatureInput, 'utf8');
+      const signature = forge.pki.privateKeyFromPem(this.privateKeyPem).sign(md);
+      const encodedSignature = Buffer.from(signature, 'binary').toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+      const assertion = `${signatureInput}.${encodedSignature}`;
+      const response = await fetch(`${this.loginUrl}/services/oauth2/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion }).toString()
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error_description || 'JWT Auth Failed');
+      if (data.instance_url) this.instanceUrl = data.instance_url;
+      return data.access_token;
+    } catch (error) { throw error; }
+  }
+
+  async query(soql: string, silent = false): Promise<any> {
+    try {
+      console.log(`🔗 [SalesforceService] Executing Query: ${soql}`);
+      const token = await this.getAccessToken();
+      const resp = await fetch(`${this.instanceUrl}/services/data/v60.0/query/?q=${encodeURIComponent(soql)}`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await resp.json();
+      if (!resp.ok) {
+        if (!silent) console.error('❌ [SalesforceService] Query Error:', data[0]?.message);
+        throw new Error(data[0]?.message || 'Salesforce Query Error');
+      }
+      console.log(`✅ [SalesforceService] Query Success. Found ${data.totalSize} records.`);
+      return data;
+    } catch (error) {
+      if (!silent) console.error('❌ [SalesforceService] Query Failed:', error);
+      throw error;
+    }
+  }
+
+  private extractYoutubeId(idOrUrl: string): string {
+    if (!idOrUrl) return '';
+    if (idOrUrl.includes('youtube.com') || idOrUrl.includes('youtu.be')) {
+      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/)([^#\&\?]*).*/;
+      const match = idOrUrl.match(regExp);
+      return (match && match[2].length === 11) ? match[2] : idOrUrl;
+    }
+    return idOrUrl;
+  }
+
+  // --- 👤 Member Logic ---
+
+  async checkContactExists(phone: string, uid?: string): Promise<any> {
+    const rawDigits = phone.replace(/\D/g, '');
+    if (rawDigits.length < 10) return { exists: false };
+
+    const last10 = rawDigits.slice(-10);
+    try {
+      // Check both Phone and MobilePhone fields with a more inclusive LIKE pattern
+      const soql = `SELECT Id, Name, FirstName, LastName, Email, Phone, MobilePhone, User_Type__c, CreatedDate, MailingCity, MailingState, MailingStreet FROM Contact WHERE (Phone LIKE '%${last10}' OR MobilePhone LIKE '%${last10}') ${uid ? `OR Mobile_App_ID__c = '${uid}'` : ''} LIMIT 1`;
+      const result = await this.query(soql, true);
+
+      if (result.totalSize > 0) {
+        const rec = result.records[0];
+        return {
+          exists: true,
+          member: {
+            id: rec.Id,
+            name: rec.Name,
+            firstName: rec.FirstName,
+            lastName: rec.LastName,
+            email: rec.Email,
+            phone: rec.Phone || rec.MobilePhone,
+            userType: rec.User_Type__c || 'Member',
+            mailingCity: rec.MailingCity,
+            mailingState: rec.MailingState,
+            mailingStreet: rec.MailingStreet,
+            joinDate: rec.CreatedDate
+          }
+        };
+      }
+      return { exists: false };
+    } catch (error) {
+      console.error('❌ [SalesforceService] checkContactExists Error:', error);
+      // Re-throw so the UI knows the check failed rather than assuming it's a new user
+      throw error;
+    }
+  }
+
+  async syncMember(contactId: string, uid: string) {
+    const token = await this.getAccessToken();
+    await fetch(`${this.instanceUrl}/services/data/v60.0/sobjects/Contact/${contactId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Mobile_App_ID__c: uid })
+    });
+  }
+
+  async updateMemberProfile(contactId: string, details: any) {
+    try {
+      const token = await this.getAccessToken();
+      const body: any = {};
+      if (details.firstName) body.FirstName = details.firstName;
+      if (details.lastName) body.LastName = details.lastName;
+      if (details.email) body.Email = details.email;
+      if (details.mailingCity) body.MailingCity = details.mailingCity;
+      if (details.mailingStreet) body.MailingStreet = details.mailingStreet;
+
+      const resp = await fetch(`${this.instanceUrl}/services/data/v60.0/sobjects/Contact/${contactId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err[0]?.message || 'Failed to update profile');
+      }
+      return true;
+    } catch (error) {
+      console.error('❌ [SalesforceService] updateMemberProfile Error:', error);
+      throw error;
+    }
+  }
+
+  async createMember(data: any) {
+    const token = await this.getAccessToken();
+
+    try {
+      // 1. Create an Account with the Member's Full Name, Auto-Activate, and DUAL ADDRESS
+      const accountBody = {
+        Name: `${data.firstName} ${data.lastName}`,
+        Phone: data.phone,
+        Active__c: true,
+        Membership_Status__c: 'Active',
+        // Save to both Billing and Shipping to be safe
+        BillingStreet: data.street,
+        BillingCity: data.city,
+        BillingState: data.state,
+        BillingPostalCode: data.zip,
+        ShippingStreet: data.street,
+        ShippingCity: data.city,
+        ShippingState: data.state,
+        ShippingPostalCode: data.zip
+      };
+
+      const accountResp = await fetch(`${this.instanceUrl}/services/data/v60.0/sobjects/Account`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(accountBody)
+      });
+
+      let accountData = await accountResp.json();
+
+      // If dual save fails, try basic save
+      if (!accountResp.ok) {
+        const basicAccountBody = {
+          Name: `${data.firstName} ${data.lastName}`,
+          Phone: data.phone,
+          Active__c: true
+        };
+        const retryResp = await fetch(`${this.instanceUrl}/services/data/v60.0/sobjects/Account`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(basicAccountBody)
+        });
+        accountData = await retryResp.json();
+      }
+
+      const accountId = accountData.id;
+
+      // 2. Create the Contact with BASIC fields
+      const basicContactBody = {
+        FirstName: data.firstName,
+        LastName: data.lastName,
+        AccountId: accountId,
+        Phone: data.phone,
+        MobilePhone: data.phone,
+        Email: data.email,
+        User_Type__c: 'Member',
+        Mobile_App_ID__c: data.uid
+      };
+
+      let resp = await fetch(`${this.instanceUrl}/services/data/v60.0/sobjects/Contact`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(basicContactBody)
+      });
+
+      let result = await resp.json();
+      if (!resp.ok) throw new Error(result[0]?.message || 'Basic contact creation failed');
+      const contactId = result.id;
+
+      // 3. Attempt to update all other fields INDIVIDUALLY
+      const updateBlocks = [
+        // GROUPED BAPTISM: Must send together for Validation Rules
+        {
+          Have_You_Baptized__c: data.baptized,
+          Date_of_Baptism__c: data.baptismDate || null,
+          Church_Of_Baptism__c: data.baptismChurch
+        },
+
+        // Personal
+        { Current_Church__c: data.churchName },
+        { Birthdate: data.dob || null },
+        { Gender__c: data.gender },
+        { Martial_Status__c: data.maritalStatus },
+
+        // Address
+        { MailingStreet: data.street },
+        { MailingCity: data.city },
+        { MailingState: data.state },
+        { MailingPostalCode: data.zip }
+      ];
+
+      const errors = [];
+      for (const fieldSet of updateBlocks) {
+        try {
+          const patchResp = await fetch(`${this.instanceUrl}/services/data/v60.0/sobjects/Contact/${contactId}`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(fieldSet)
+          });
+
+          if (!patchResp.ok) {
+            const err = await patchResp.json();
+            const fieldName = Object.keys(fieldSet)[0];
+            errors.push(`${fieldName}: ${err[0]?.message || 'Unknown error'}`);
+            console.warn(`⚠️ [SalesforceService] Field update failed: ${fieldName}`, err);
+          }
+        } catch (e) {
+          errors.push(`System Error: ${e.message}`);
+        }
+      }
+
+      return {
+        success: true,
+        id: contactId,
+        warnings: errors.length > 0 ? errors : null
+      };
+    } catch (error: any) {
+      console.error('❌ [SalesforceService] createMember Error:', error);
+      // Return the actual error message so the UI can show it
+      throw new Error(error.message || 'Salesforce creation failed');
+    }
+  }
+
+  // --- 🎥 Video & Sermon Logic ---
+
+  async getDailyVideos(limit = 10): Promise<SalesforceVideo[]> {
+    try {
+      const soql = `SELECT Id, Video_Title__c, YouTube_ID__c, Published_Date__c, Duration__c, Pastor_Name__c FROM Daily_Video__c ORDER BY Published_Date__c DESC LIMIT ${limit}`;
+      const result = await this.query(soql);
+      return result.records.map((rec: any) => {
+        return {
+          id: rec.Id,
+          title: rec.Video_Title__c,
+          youtubeId: this.extractYoutubeId(rec.YouTube_ID__c),
+          date: rec.Published_Date__c,
+          duration: rec.Duration__c,
+          pastor: rec.Pastor_Name__c
+        };
+      });
+    } catch (error) {
+      console.error('❌ [SalesforceService] getDailyVideos Error:', error);
+      return [];
+    }
+  }
+
+  async getSermons(limit = 50): Promise<any[]> {
+    try {
+      // High-Fidelity Query: Try all new fields first (Silent)
+      let soql = `SELECT Id, Name, Title_Telugu__c, Pastor_Name__c, Sermon_Date__c, YouTube_ID__c, Status__c, Duration__c, View_Count__c, Scripture_Reference__c FROM Sermon__c ORDER BY Sermon_Date__c DESC LIMIT ${limit}`;
+      let result;
+      try {
+        result = await this.query(soql, true);
+      } catch (e) {
+        console.warn('⚠️ [SalesforceService] New fields missing, using legacy fallback.');
+        // Fallback Query: Only base fields
+        soql = `SELECT Id, Name, Title_Telugu__c, Pastor_Name__c, Sermon_Date__c, YouTube_ID__c, Status__c FROM Sermon__c ORDER BY Sermon_Date__c DESC LIMIT ${limit}`;
+        result = await this.query(soql);
+      }
+
+      return result.records.map((rec: any) => ({
+        id: rec.Id,
+        title: rec.Name,
+        titleTelugu: rec.Title_Telugu__c,
+        pastor: rec.Pastor_Name__c,
+        date: rec.Sermon_Date__c,
+        youtubeId: this.extractYoutubeId(rec.YouTube_ID__c),
+        status: rec.Status__c,
+        duration: rec.Duration__c || 'N/A',
+        viewCount: rec.View_Count__c || 0,
+        scripture: rec.Scripture_Reference__c || ''
+      }));
+    } catch (error) {
+      console.error('❌ [SalesforceService] getSermons Critical Failure:', error);
+      return [];
+    }
+  }
+
+  async getWorshipSongs(): Promise<WorshipSong[]> {
+    try {
+      const soql = `SELECT Id, Name, YouTube_ID__c FROM Sermon__c WHERE Status__c = 'Published' AND Name LIKE '%Song%' LIMIT 50`;
+      const result = await this.query(soql);
+      return result.records.map((rec: any) => ({ id: rec.Id, title: rec.Name, artist: 'COG Worship', key: 'C' }));
+    } catch (error) { return []; }
+  }
+
+  // --- 📅 Events Logic ---
+
+  async fetchEvents(limit = 10): Promise<any[]> {
+    try {
+      const soql = `SELECT Id, Name, Title_Telugu__c, Date__c, Time__c, End_Time__c, Description__c, Description_Telugu__c, Location__c, Location_Telugu__c, Address__c, Event_Type__c, Event_Mode__c, RSVP_Enabled__c, Show_RSVP_Count__c, Attendance_Cap__c, Audience__c, Status__c, Banner_Image_URL__c, Banner_Color__c, Recurring_Frequency__c FROM Schedule_Event__c WHERE Status__c = 'Published' AND Date__c >= TODAY ORDER BY Date__c ASC LIMIT ${limit}`;
+      const result = await this.query(soql, true).catch(async () => {
+        console.warn('⚠️ [SalesforceService] New event fields missing, falling back.');
+        const fallbackSoql = `SELECT Id, Name, Title_Telugu__c, Date__c, Time__c, Location__c, Status__c FROM Schedule_Event__c WHERE Status__c = 'Published' AND Date__c >= TODAY ORDER BY Date__c ASC LIMIT ${limit}`;
+        return await this.query(fallbackSoql);
+      });
+
+      return result.records.map((rec: any) => {
+        // 🛠️ DEBUG: High-Fidelity Character Audit
+        const val = rec.Event_Type__c || '';
+        const codes = val.split('').map((c: string) => c.charCodeAt(0)).join(',');
+        console.log(`[DEBUG] Raw Event Type: "${val}" (Length: ${val.length}, Codes: [${codes}])`);
+
+        return {
+          id: rec.Id,
+          name: rec.Name,
+          titleTe: rec.Title_Telugu__c,
+          date: rec.Date__c,
+          startTime: rec.Time__c,
+          endTime: rec.End_Time__c,
+          description: rec.Description__c,
+          descriptionTe: rec.Description_Telugu__c,
+          location: rec.Location__c,
+          locationTe: rec.Location_Telugu__c,
+          address: rec.Address__c,
+          type: rec.Event_Type__c,
+          mode: rec.Event_Mode__c,
+          rsvpEnabled: rec.RSVP_Enabled__c,
+          rsvpPublic: rec.Show_RSVP_Count__c,
+          rsvpCap: rec.Attendance_Cap__c,
+          audience: rec.Audience__c,
+          status: rec.Status__c,
+          bannerUrl: rec.Banner_Image_URL__c,
+          bannerColor: rec.Banner_Color__c || '#c0392b',
+          recurring: rec.Recurring_Frequency__c
+        };
+      });
+    } catch (error) { return []; }
+  }
+
+  async getEventMetadata(): Promise<any> {
+    try {
+      const token = await this.getAccessToken();
+      const resp = await fetch(`${this.instanceUrl}/services/data/v60.0/sobjects/Schedule_Event__c/describe`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await resp.json();
+
+      const mapField = (fieldName: string) => {
+        const f = data.fields.find((field: any) => field.name === fieldName);
+        if (!f || !f.picklistValues) return [];
+        return f.picklistValues.map((v: any) => ({
+          label: v.label,
+          value: v.value
+        }));
+      };
+
+      return {
+        types: mapField('Event_Type__c').map((t: any) => ({
+          ...t,
+          label: t.label.includes(' - ') ? t.label.replace(' - ', ' · ') : t.label
+        })),
+        modes: mapField('Event_Mode__c'),
+        audiences: mapField('Audience__c'),
+        recurring: mapField('Recurring_Frequency__c'),
+        statuses: mapField('Status__c')
+      };
+    } catch (error) {
+      console.error('❌ [SalesforceService] Metadata Discovery Failed:', error);
+      return null;
+    }
+  }
+
+  async getEvents(limit = 50): Promise<any[]> {
+    try {
+      const soql = `SELECT Id, Name, Title_Telugu__c, Date__c, Time__c, End_Time__c, Description__c, Description_Telugu__c, Location__c, Location_Telugu__c, Address__c, Event_Type__c, Event_Mode__c, RSVP_Enabled__c, Show_RSVP_Count__c, Attendance_Cap__c, Audience__c, Status__c, Banner_Image_URL__c, Banner_Color__c, Recurring_Frequency__c FROM Schedule_Event__c ORDER BY Date__c DESC LIMIT ${limit}`;
+      const result = await this.query(soql);
+      return result.records.map((rec: any) => ({
+        id: rec.Id,
+        name: rec.Name,
+        titleTe: rec.Title_Telugu__c,
+        date: rec.Date__c,
+        startTime: rec.Time__c,
+        endTime: rec.End_Time__c,
+        descEn: rec.Description__c,
+        descTe: rec.Description_Telugu__c,
+        venueEn: rec.Location__c,
+        venueTe: rec.Location_Telugu__c,
+        address: rec.Address__c,
+        eventType: rec.Event_Type__c,
+        mode: rec.Event_Mode__c,
+        rsvpEnabled: rec.RSVP_Enabled__c,
+        rsvpPublic: rec.Show_RSVP_Count__c,
+        rsvpCap: rec.Attendance_Cap__c,
+        audience: rec.Audience__c,
+        status: rec.Status__c,
+        bannerUrl: rec.Banner_Image_URL__c,
+        bannerColor: rec.Banner_Color__c,
+        recurring: rec.Recurring_Frequency__c
+      }));
+    } catch (error) { return []; }
+  }
+
+  async createEvent(details: any) {
+    try {
+      const token = await this.getAccessToken();
+      const isUpdate = !!details.id;
+      const url = `${this.instanceUrl}/services/data/v60.0/sobjects/Schedule_Event__c${isUpdate ? '/' + details.id : ''}`;
+
+      const body = {
+        Name: details.titleEn,
+        Title_Telugu__c: details.titleTe,
+        Date__c: details.date,
+        Time__c: details.startTime,
+        End_Time__c: details.endTime,
+        Description__c: details.descEn,
+        Description_Telugu__c: details.descTe,
+        Location__c: details.venueEn,
+        Location_Telugu__c: details.venueTe,
+        Address__c: details.address,
+        Event_Type__c: details.eventType,
+        Event_Mode__c: details.mode,
+        RSVP_Enabled__c: details.rsvpEnabled,
+        Show_RSVP_Count__c: details.rsvpPublic,
+        Attendance_Cap__c: details.rsvpCap || 0,
+        Audience__c: details.audience,
+        Status__c: details.publishStatus || 'Published',
+        Banner_Image_URL__c: details.bannerUrl,
+        Banner_Color__c: details.bannerColor,
+        Recurring_Frequency__c: details.recurring,
+        Notify_Members__c: details.notifyOnPublish,
+        Reminder_1_Day__c: details.reminder1Day,
+        Reminder_1_Hour__c: details.reminder1Hour
+      };
+
+      const resp = await fetch(url, {
+        method: isUpdate ? 'PATCH' : 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json();
+        throw new Error(errData[0]?.message || 'Failed to save event');
+      }
+      console.log(`✅ [SalesforceService] Event ${isUpdate ? 'Updated' : 'Created'} Successfully.`);
+    } catch (error) {
+      console.error('❌ [SalesforceService] createEvent Error:', error);
+      throw error;
+    }
+  }
+
+  async getUpcomingEvents(limit = 10): Promise<any[]> {
+    try {
+      const soql = `SELECT Id, Name, Title_Telugu__c, Date__c, Time__c, End_Time__c, Location__c, Description__c, Banner_Image_URL__c FROM Schedule_Event__c WHERE Date__c >= TODAY ORDER BY Date__c ASC, Time__c ASC LIMIT ${limit}`;
+      const result = await this.query(soql);
+      return result.records.map((rec: any) => ({
+        id: rec.Id,
+        title: rec.Name,
+        titleTelugu: rec.Title_Telugu__c,
+        date: rec.Date__c,
+        startTime: rec.Time__c,
+        endTime: rec.End_Time__c,
+        location: rec.Location__c,
+        description: rec.Description__c,
+        category: 'General',
+        image: rec.Banner_Image_URL__c
+      }));
+    } catch (error) {
+      console.error('❌ [SalesforceService] getUpcomingEvents Error:', error);
+      return [];
+    }
+  }
+
+  async getPastEvents(limit = 10): Promise<any[]> {
+    try {
+      const soql = `SELECT Id, Name, Title_Telugu__c, Date__c, Time__c, End_Time__c, Location__c, Description__c, Banner_Image_URL__c FROM Schedule_Event__c WHERE Date__c < TODAY ORDER BY Date__c DESC LIMIT ${limit}`;
+      const result = await this.query(soql);
+      return result.records.map((rec: any) => ({
+        id: rec.Id,
+        title: rec.Name,
+        titleTelugu: rec.Title_Telugu__c,
+        date: rec.Date__c,
+        startTime: rec.Time__c,
+        endTime: rec.End_Time__c,
+        location: rec.Location__c,
+        description: rec.Description__c,
+        category: 'General',
+        image: rec.Banner_Image_URL__c
+      }));
+    } catch (error) {
+      console.error('❌ [SalesforceService] getPastEvents Error:', error);
+      return [];
+    }
+  }
+
+  // --- 📖 Promise Logic ---
+
+  async getDailyPromise(): Promise<DailyPromise | null> {
+    try {
+      const soql = `SELECT Id, Promises__c, Promise_text_telugu__c, Date__c, Devotional_Note__c, Pastor_Name__c, YouTube_ID__c, Name, Video_Title__c, Duration__c, Verse_Reference_En__c, Verse_Reference_Te__c FROM Daily_Promises__c WHERE Date__c = TODAY LIMIT 1`;
+      let result;
+      try {
+        result = await this.query(soql, true);
+      } catch (e) {
+        const fallbackSoql = `SELECT Id, Promises__c, Promise_text_telugu__c, Date__c, Devotional_Note__c, Pastor_Name__c, YouTube_ID__c, Name, Video_Title__c, Duration__c FROM Daily_Promises__c WHERE Date__c = TODAY LIMIT 1`;
+        result = await this.query(fallbackSoql);
+      }
+
+      if (result.totalSize > 0) {
+        const rec = result.records[0];
+        return {
+          id: rec.Id,
+          verse: rec.Promises__c,
+          verseTelugu: rec.Promise_text_telugu__c,
+          date: rec.Date__c,
+          devotionalNote: rec.Devotional_Note__c,
+          pastor: rec.Pastor_Name__c,
+          youtubeId: this.extractYoutubeId(rec.YouTube_ID__c),
+          verseReference: rec.Name,
+          verseReferenceEn: rec.Verse_Reference_En__c || rec.Name, // Use Name as fallback for En
+          verseReferenceTe: rec.Verse_Reference_Te__c,
+          videoTitle: rec.Video_Title__c,
+          duration: rec.Duration__c
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('❌ [SalesforceService] getDailyPromise Error:', error);
+      return null;
+    }
+  }
+
+  async getTodayPromise(): Promise<DailyPromise | null> {
+    return this.getDailyPromise();
+  }
+
+  async getDailyPromisesArchive(limit = 30): Promise<DailyPromise[]> {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const soql = `SELECT Id, Promises__c, Promise_text_telugu__c, Date__c, Devotional_Note__c, Pastor_Name__c, YouTube_ID__c, Name, Video_Title__c, Duration__c, Verse_Reference_En__c, Verse_Reference_Te__c FROM Daily_Promises__c WHERE Date__c <= ${today} ORDER BY Date__c DESC LIMIT ${limit}`;
+      const result = await this.query(soql, true);
+      return result.records.map((rec: any) => ({
+        id: rec.Id,
+        verse: rec.Promises__c,
+        verseTelugu: rec.Promise_text_telugu__c,
+        date: rec.Date__c,
+        devotionalNote: rec.Devotional_Note__c,
+        pastor: rec.Pastor_Name__c,
+        youtubeId: this.extractYoutubeId(rec.YouTube_ID__c),
+        verseReference: rec.Name,
+        verseReferenceEn: rec.Verse_Reference_En__c || (rec.Name && !rec.Name.startsWith('DP') ? rec.Name : null),
+        verseReferenceTe: rec.Verse_Reference_Te__c,
+        videoTitle: rec.Video_Title__c,
+        duration: rec.Duration__c
+      }));
+    } catch (error) {
+      console.error('❌ [SalesforceService] getDailyPromisesArchive Error:', error);
+      return [];
+    }
+  }
+
+  async getCalendarData(year: number, month: number): Promise<any[]> {
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
+    try {
+      const soql = `SELECT Id, Date__c, Status__c, Promises__c FROM Daily_Promises__c WHERE Date__c >= ${startDate} AND Date__c <= ${endDate} ORDER BY Date__c ASC`;
+      const result = await this.query(soql);
+      return result.records.map((rec: any) => ({
+        id: rec.Id,
+        date: rec.Date__c,
+        status: rec.Status__c,
+        verse: rec.Promises__c
+      }));
+    } catch (error) { return []; }
+  }
+
+  // --- 🙏 Prayer Wall ---
+
+  async getPrayerRequests(params?: any): Promise<any[]> {
+    try {
+      const soql = `SELECT Id, SuppliedName, SuppliedPhone, Description, Detailed_Prayer_Request__c, Subject, Reason, Status, CreatedDate FROM Case WHERE Type = 'Prayer Request' ORDER BY CreatedDate DESC LIMIT 50`;
+      const result = await this.query(soql, true).catch(async () => {
+        const fallbackSoql = `SELECT Id, SuppliedName, SuppliedPhone, Description, Detailed_Prayer_Request__c, Subject, Reason, Status, CreatedDate FROM Case ORDER BY CreatedDate DESC LIMIT 50`;
+        return await this.query(fallbackSoql);
+      });
+
+      return result.records.map((rec: any) => ({
+        id: rec.Id,
+        name: rec.SuppliedName || 'Faithful Member',
+        phone: rec.SuppliedPhone,
+        text: rec.Description || rec.Subject || 'Shared a prayer request.',
+        textTe: rec.Detailed_Prayer_Request__c,
+        isAnonymous: !rec.SuppliedName,
+        prayCount: Math.floor(Math.random() * 20) + 5,
+        isAnswered: rec.Status === 'Closed',
+        createdAt: rec.CreatedDate,
+        category: rec.Reason || (rec.Subject?.includes('[') ? rec.Subject.split(']')[0].replace('[', '') : 'General')
+      }));
+    } catch (error) { return []; }
+  }
+
+  async markAsAnswered(caseId: string) {
+    try {
+      const token = await this.getAccessToken();
+      const resp = await fetch(`${this.instanceUrl}/services/data/v60.0/sobjects/Case/${caseId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ Status: 'Closed' })
+      });
+      if (!resp.ok) throw new Error('Failed to update status');
+    } catch (error) { throw error; }
+  }
+
+  async deletePrayerRequest(caseId: string) {
+    try {
+      const token = await this.getAccessToken();
+      const resp = await fetch(`${this.instanceUrl}/services/data/v60.0/sobjects/Case/${caseId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!resp.ok) throw new Error('Failed to delete request');
+    } catch (error) { throw error; }
+  }
+
+  async searchMembers(query: string): Promise<SalesforceMember[]> {
+    try {
+      if (!query || query.length < 3) return [];
+      const soql = `SELECT Id, Name, FirstName, LastName, Email, Phone, MobilePhone FROM Contact WHERE Name LIKE '%${query}%' LIMIT 10`;
+      const result = await this.query(soql, true);
+      return result.records.map((rec: any) => ({
+        id: rec.Id,
+        name: rec.Name,
+        firstName: rec.FirstName,
+        lastName: rec.LastName,
+        email: rec.Email,
+        phone: rec.Phone || rec.MobilePhone
+      }));
+    } catch (error) {
+      console.error('❌ [SalesforceService] searchMembers Error:', error);
+      return [];
+    }
+  }
+
+  async getPrayerCategories(): Promise<{ label: string, value: string }[]> {
+    try {
+      const token = await this.getAccessToken();
+      const resp = await fetch(`${this.instanceUrl}/services/data/v60.0/sobjects/Case/describe`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await resp.json();
+      const reasonField = data.fields.find((f: any) =>
+        f.name === 'Prayer_Category__c' ||
+        f.name === 'Reason' ||
+        f.name === 'How_can_we_support_you__c'
+      );
+
+      if (reasonField && reasonField.picklistValues) {
+        const values = reasonField.picklistValues.map((v: any) => ({ label: v.label, value: v.value }));
+        if (values.length > 0) return values;
+      }
+
+      return [
+        { label: 'Pray for me', value: 'Pray for me' },
+        { label: 'Pray for my family', value: 'Pray for my family' },
+        { label: 'Pray for healing', value: 'Pray for healing' },
+        { label: 'Pray for peace and strength', value: 'Pray for peace and strength' },
+        { label: 'Other (if necessary)', value: 'Other (if necessary)' }
+      ];
+    } catch (error) {
+      console.error('❌ [SalesforceService] getPrayerCategories Error:', error);
+      return [];
+    }
+  }
+
+  async submitPrayerRequest(details: any) {
+    try {
+      console.log('📝 [SalesforceService] Submitting Prayer Request:', JSON.stringify(details, null, 2));
+      const token = await this.getAccessToken();
+
+      let contactId = details.contactId || null;
+      if (!contactId && details.phone) {
+        const check = await this.checkContactExists(details.phone);
+        if (check.exists) contactId = check.member.id;
+      }
+
+      const body: any = {
+        SuppliedName: details.name,
+        SuppliedPhone: details.phone,
+        Description: details.requestEn,
+        Detailed_Prayer_Request__c: details.requestTe,
+        Reason: details.category,
+        How_can_we_support_you__c: details.category,
+        Subject: `Prayer Request: ${details.category}`,
+        Type: 'Prayer Request',
+        Origin: 'Mobile App',
+        Status: 'New'
+      };
+
+      if (contactId) body.ContactId = contactId;
+
+      const resp = await fetch(`${this.instanceUrl}/services/data/v60.0/sobjects/Case`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json();
+        const errorMessage = errData[0]?.message || '';
+        const errorCode = errData[0]?.errorCode || '';
+
+        // Fallback for missing custom fields (if they were somehow renamed or not deployed)
+        if (errorCode === 'INVALID_FIELD' || errorMessage.includes('No such column')) {
+          console.log('⚠️ [SalesforceService] Invalid field detected, retrying with standard fields only...');
+
+          const fallbackBody = { ...body };
+          // Only delete if we are unsure about them, but we verified these labels now
+          // However, for maximum safety we can try a clean standard-only save if the specific custom ones fail
+          delete fallbackBody.Detailed_Prayer_Request__c;
+          delete fallbackBody.How_can_we_support_you__c;
+
+          fallbackBody.Description = details.requestEn +
+            (details.requestTe ? `\n\n[Detailed]: ${details.requestTe}` : '') +
+            (details.category ? `\n\n[Category]: ${details.category}` : '');
+
+          const retryResp = await fetch(`${this.instanceUrl}/services/data/v60.0/sobjects/Case`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(fallbackBody)
+          });
+
+          if (!retryResp.ok) throw new Error('Fallback failed to save prayer case');
+        } else {
+          throw new Error(errorMessage || 'Failed to create prayer case');
+        }
+      }
+
+      console.log('✅ [SalesforceService] Prayer Request Saved Successfully.');
+    } catch (error) {
+      console.error('❌ [SalesforceService] submitPrayerRequest Error:', error);
+      throw error;
+    }
+  }
+
+  // --- 💳 Giving Logic ---
+
+  async createDonation(details: any) {
+    const token = await this.getAccessToken();
+    await fetch(`${this.instanceUrl}/services/data/v60.0/sobjects/Expense__c`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Name: `Donation - ${details.name}`, Amount__c: details.amount, Date__c: new Date().toISOString().split('T')[0] })
+    });
+  }
+
+  // --- 🛠️ Admin Logic (Re-used) ---
+
+  async getAdminPromises(): Promise<DailyPromise[]> {
+    try {
+      let soql = `SELECT Id, Promises__c, Promise_text_telugu__c, Date__c, Status__c, Devotional_Note__c, Pastor_Name__c, YouTube_ID__c, Name, Video_Title__c, Duration__c, Verse_Reference_En__c, Verse_Reference_Te__c FROM Daily_Promises__c ORDER BY Date__c DESC LIMIT 100`;
+      let result;
+      try {
+        result = await this.query(soql, true);
+      } catch (e) {
+        soql = `SELECT Id, Promises__c, Promise_text_telugu__c, Date__c, Status__c, Devotional_Note__c, Pastor_Name__c, YouTube_ID__c, Name, Video_Title__c, Duration__c FROM Daily_Promises__c ORDER BY Date__c DESC LIMIT 100`;
+        result = await this.query(soql);
+      }
+
+      return result.records.map((rec: any) => ({
+        id: rec.Id,
+        verse: rec.Promises__c,
+        verseTelugu: rec.Promise_text_telugu__c,
+        date: rec.Date__c,
+        status: rec.Status__c,
+        devotionalNote: rec.Devotional_Note__c,
+        pastor: rec.Pastor_Name__c,
+        youtubeId: this.extractYoutubeId(rec.YouTube_ID__c),
+        verseReference: rec.Name,
+        verseReferenceEn: rec.Verse_Reference_En__c,
+        verseReferenceTe: rec.Verse_Reference_Te__c,
+        videoTitle: rec.Video_Title__c,
+        duration: rec.Duration__c
+      }));
+    } catch (error) {
+      console.error('❌ [SalesforceService] getAdminPromises Failed:', error);
+      return [];
+    }
+  }
+
+  async createDailyPromise(details: any) {
+    try {
+      console.log('📝 [SalesforceService] Attempting to Save Promise:', JSON.stringify(details, null, 2));
+      const token = await this.getAccessToken();
+      const isUpdate = !!details.id;
+      const url = `${this.instanceUrl}/services/data/v60.0/sobjects/Daily_Promises__c${isUpdate ? '/' + details.id : ''}`;
+
+      const body = {
+        Date__c: details.date,
+        Promises__c: details.verse,
+        Verse_Reference_En__c: details.verseReferenceEn,
+        Promise_text_telugu__c: details.verseTelugu,
+        Verse_Reference_Te__c: details.verseReferenceTe,
+        Devotional_Note__c: details.devotionalNote,
+        Pastor_Name__c: details.pastor,
+        YouTube_ID__c: details.youtubeId,
+        Video_Title__c: details.videoTitle,
+        Duration__c: details.duration,
+        Status__c: details.status || 'Published'
+      };
+
+      console.log(`🔗 [SalesforceService] ${isUpdate ? 'PATCH' : 'POST'} to ${url}`);
+
+      const resp = await fetch(url, {
+        method: isUpdate ? 'PATCH' : 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json();
+        console.error('❌ [SalesforceService] Save Failed:', JSON.stringify(errData, null, 2));
+        throw new Error(errData[0]?.message || 'Failed to save promise');
+      }
+
+      console.log(`✅ [SalesforceService] Promise ${isUpdate ? 'Updated' : 'Created'} Successfully.`);
+    } catch (error) {
+      console.error('❌ [SalesforceService] createDailyPromise Critical Error:', error);
+      throw error;
+    }
+  }
+
+  async createSermon(details: any) {
+    try {
+      const token = await this.getAccessToken();
+      const isUpdate = !!details.id;
+      const url = `${this.instanceUrl}/services/data/v60.0/sobjects/Sermon__c${isUpdate ? '/' + details.id : ''}`;
+
+      const fullBody = {
+        Name: details.titleEn,
+        Title_Telugu__c: details.titleTe,
+        Pastor_Name__c: details.pastor,
+        Sermon_Date__c: details.date,
+        Duration__c: details.duration,
+        YouTube_ID__c: details.youtubeId,
+        Description__c: details.description,
+        Scripture_Reference__c: details.scripture,
+        Status__c: details.status || 'Published'
+      };
+
+      let resp = await fetch(url, {
+        method: isUpdate ? 'PATCH' : 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(fullBody)
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json();
+        const errorMessage = errData[0]?.message || '';
+
+        // If error is about missing fields, retry with legacy body
+        if (errorMessage.includes('No such column') || errorMessage.includes('INVALID_FIELD')) {
+          console.warn('⚠️ [SalesforceService] New fields missing, retrying with legacy payload...');
+          const legacyBody = {
+            Name: details.titleEn,
+            Title_Telugu__c: details.titleTe,
+            Pastor_Name__c: details.pastor,
+            Sermon_Date__c: details.date,
+            YouTube_ID__c: details.youtubeId,
+            Status__c: details.status || 'Published'
+          };
+          resp = await fetch(url, {
+            method: isUpdate ? 'PATCH' : 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(legacyBody)
+          });
+
+          if (!resp.ok) throw new Error('Legacy save also failed');
+        } else {
+          throw new Error(errorMessage || 'Failed to save sermon');
+        }
+      }
+
+      console.log(`✅ [SalesforceService] Sermon ${isUpdate ? 'Updated' : 'Created'} Successfully.`);
+    } catch (error) {
+      console.error('❌ [SalesforceService] createSermon Critical Error:', error);
+      throw error;
+    }
+  }
+
+  // End of class
+}
+
+export default new SalesforceService();
