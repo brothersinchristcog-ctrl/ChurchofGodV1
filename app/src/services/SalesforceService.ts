@@ -1144,11 +1144,11 @@ spfkUchVp71l4aWpCW50lro=
 
       return result.records.map((rec: any) => {
         const replies = rec.CaseComments?.records?.map((c: any) => {
-          const rawBody: string = c.CommentBody || '';
+          const rawBody: string = (c.CommentBody || '').trim();
           // Extract embedded author prefix: "[Name]: body"
-          const prefixMatch = rawBody.match(/^\[(.+?)\]:\s*/);
+          const prefixMatch = rawBody.match(/^\[([^\]]+)\]:\s*/);
           const author = prefixMatch ? prefixMatch[1] : (c.CreatedBy?.Name || 'Member');
-          const body = prefixMatch ? rawBody.replace(prefixMatch[0], '') : rawBody;
+          const body = prefixMatch ? rawBody.replace(prefixMatch[0], '').trim() : rawBody;
           return { id: c.Id, body, date: c.CreatedDate, author };
         }) || [];
 
