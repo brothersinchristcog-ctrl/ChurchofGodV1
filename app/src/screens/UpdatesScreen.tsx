@@ -10,6 +10,7 @@ import {
   limit, 
   onSnapshot 
 } from '@react-native-firebase/firestore';
+import { useAuth } from '../context/AuthContext';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.35;
@@ -102,6 +103,7 @@ export default function UpdatesScreen({ navigation, route }: any) {
   const [loading, setLoading] = useState(true);
   const [hasAutoOpened, setHasAutoOpened] = useState(false);
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
+  const { user, member } = useAuth();
 
   useEffect(() => {
     const loadDeletedIds = async () => {
@@ -141,6 +143,24 @@ export default function UpdatesScreen({ navigation, route }: any) {
         if (snapshot) {
           const list = snapshot.docs.map(doc => {
             const data = doc.data();
+            
+            // SECURITY: If broadcast is targeted to a specific phone, skip it if not for this user
+            const isTargeted = data.targetPhone && typeof data.targetPhone === 'string' && data.targetPhone.trim().length > 0;
+            if (isTargeted) {
+              const uPhone = user?.phoneNumber || '';
+              const mPhone = member?.phone || member?.mobilePhone || '';
+              const target = data.targetPhone.replace(/\D/g, ''); // strip non-digits for comparison
+              
+              const match1 = uPhone && uPhone.replace(/\D/g, '').endsWith(target);
+              const match2 = mPhone && mPhone.replace(/\D/g, '').endsWith(target);
+              const match3 = target.endsWith(uPhone.replace(/\D/g, '')) && uPhone.length > 5;
+              const match4 = target.endsWith(mPhone.replace(/\D/g, '')) && mPhone.length > 5;
+              
+              if (!match1 && !match2 && !match3 && !match4) {
+                return null; // Skip if not targeted to current user
+              }
+            }
+
             // Determine icon, color and type classification
             let icon = Bell;
             let color = '#3b82f6';
@@ -177,7 +197,7 @@ export default function UpdatesScreen({ navigation, route }: any) {
               color: color,
               url: data.url || ''
             };
-          });
+          }).filter(item => item !== null);
           setDynamicUpdates(list);
         }
         setLoading(false);
