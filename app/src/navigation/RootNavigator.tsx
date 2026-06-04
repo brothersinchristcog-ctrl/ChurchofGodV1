@@ -1,15 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useNavigation } from '@react-navigation/native';
 import { Home, Heart, BookOpen, HandCoins, User } from 'lucide-react-native';
-import { ActivityIndicator, View, Text, StyleSheet, Alert, Platform, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, View, Text, StyleSheet, Alert, Platform, TouchableOpacity, AppState, Image } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Lock } from 'lucide-react-native';
 
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { ThemeProvider } from '../context/ThemeContext';
 import Theme from '../theme/Theme';
 import AdminNavigator from './AdminNavigator'; 
+import NotificationService from '../services/NotificationService';
+import SecurityService from '../services/SecurityService';
 
 // Auth & Onboarding
 import AuthNavigator from './AuthNavigator';
@@ -31,6 +35,9 @@ import UpdatesScreen from '../screens/UpdatesScreen';
 import BibleScreen from '../screens/BibleScreen';
 import BibleChaptersScreen from '../screens/BibleChaptersScreen';
 import BibleReaderScreen from '../screens/BibleReaderScreen';
+import BiblePlansScreen from '../screens/BiblePlansScreen';
+import MemberNotesScreen from '../screens/MemberNotesScreen';
+import MembersScreen from '../screens/MembersScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -154,9 +161,121 @@ function TabNavigator() {
 
 function Navigation() {
   const { user, member, loading } = useAuth();
+  const navigation = useNavigation();
   const [onboardingComplete, setOnboardingComplete] = React.useState<boolean | null>(null);
   const [showSplash, setShowSplash] = useState(true);
+  const [isLocked, setIsLocked] = useState(false); // Default to false, check on mount
+  const appState = React.useRef(AppState.currentState);
 
+  // 1. Initial Security Check & App State Listener
+  useEffect(() => {
+    const handleSecurity = async () => {
+      // Only lock if user is a logged-in member (not guest)
+      if (user && !user.isAnonymous) {
+        const isEnabled = await SecurityService.isBiometricEnabled();
+        const isAvailable = await SecurityService.isBiometricAvailable();
+        
+        if (isEnabled && isAvailable) {
+          setIsLocked(true);
+          const success = await SecurityService.authenticate();
+          if (success) setIsLocked(false);
+        } else {
+          setIsLocked(false);
+        }
+      }
+    };
+
+    handleSecurity();
+
+    // Listen for background -> foreground to re-lock
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (
+        appState.current.match(/inactive|background/) && 
+        nextAppState === 'active' && 
+        user && !user.isAnonymous
+      ) {
+        const checkBiometrics = async () => {
+          const isEnabled = await SecurityService.isBiometricEnabled();
+          const isAvailable = await SecurityService.isBiometricAvailable();
+          
+          if (isEnabled && isAvailable) {
+            setIsLocked(true);
+            const success = await SecurityService.authenticate();
+            if (success) setIsLocked(false);
+          }
+        };
+        checkBiometrics();
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => subscription.remove();
+  }, [user]);
+
+  // Handle Notifications
+  useEffect(() => {
+    // 1. When app is in background and user clicks notification
+    const unsubscribeOnOpen = NotificationService.messaging().onNotificationOpenedApp(remoteMessage => {
+      NotificationService.handleNotificationNavigation(remoteMessage, navigation);
+    });
+
+    // 2. When app is closed and user clicks notification
+    NotificationService.messaging().getInitialNotification().then(remoteMessage => {
+      if (remoteMessage) {
+        NotificationService.handleNotificationNavigation(remoteMessage, navigation);
+      }
+    });
+
+    // 3. When app is in foreground and notification arrives
+    const unsubscribeForeground = NotificationService.setupForegroundListener(navigation);
+
+    return () => {
+      unsubscribeOnOpen();
+      unsubscribeForeground();
+    };
+  }, [navigation]);
+
+  useEffect(() => {
+    if (user && !loading) {
+      const initNotifications = async () => {
+        const hasPermission = await NotificationService.requestUserPermission();
+        if (hasPermission) {
+          await NotificationService.getFcmToken();
+        }
+
+        // Proactive self-healing: Ensure user profile document has 'name' and 'phone' in Firestore
+        if (!user.isAnonymous) {
+          try {
+            const firestore = require('@react-native-firebase/firestore').default;
+            const doc = await firestore().collection('users').doc(user.uid).get();
+            const data = doc.data();
+            if (!data?.name || !data?.phone) {
+              console.log('🩹 [Self-Healing] Missing user profile details in Firestore. Fetching from Salesforce...');
+              const phoneClean = user.phoneNumber || '';
+              if (phoneClean) {
+                const SalesforceService = require('../services/SalesforceService').default;
+                const result = await SalesforceService.checkContactExists(phoneClean);
+                if (result && result.exists) {
+                  await firestore().collection('users').doc(user.uid).set({
+                    name: result.member?.name || '',
+                    phone: phoneClean,
+                    role: 'Member',
+                    onboardingComplete: true
+                  }, { merge: true });
+                  console.log('🩹 [Self-Healing] Firestore user profile successfully repaired!');
+                }
+              }
+            }
+          } catch (err) {
+            console.warn('⚠️ [Self-Healing] Profile recovery skipped:', err);
+          }
+        }
+      };
+      initNotifications();
+    }
+  }, [user, loading]);
+
+  // Existing auth effect
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 4000);
     
@@ -202,6 +321,30 @@ function Navigation() {
     return <SplashScreen />;
   }
 
+  // ── Lock Screen View ──
+  if (isLocked && user && !user.isAnonymous) {
+    return (
+      <View style={lockStyles.container}>
+        <View style={lockStyles.card}>
+          <View style={lockStyles.iconContainer}>
+            <Lock size={40} color="#DAA520" />
+          </View>
+          <Text style={lockStyles.title}>App Locked</Text>
+          <Text style={lockStyles.subtitle}>Please verify your identity to continue</Text>
+          <TouchableOpacity 
+            style={lockStyles.button}
+            onPress={async () => {
+              const success = await SecurityService.performSecurityCheck();
+              if (success) setIsLocked(false);
+            }}
+          >
+            <Text style={lockStyles.buttonText}>Unlock App</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   const navigationKey = member?.userType?.toLowerCase() === 'admin' ? 'admin-root' : 'member-root';
 
   return (
@@ -223,6 +366,9 @@ function Navigation() {
             <Stack.Screen name="Bible" component={BibleScreen} />
             <Stack.Screen name="BibleChapters" component={BibleChaptersScreen} />
             <Stack.Screen name="BibleReader" component={BibleReaderScreen} />
+            <Stack.Screen name="BiblePlans" component={BiblePlansScreen} />
+            <Stack.Screen name="MemberNotes" component={MemberNotesScreen} />
+            <Stack.Screen name="Members" component={MembersScreen} />
           </>
         ) : (
           <Stack.Screen name="Onboarding" component={OnboardingScreen} />
@@ -271,5 +417,60 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 4,
     letterSpacing: 0.2
+  }
+});
+
+const lockStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0a192f',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  card: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 30,
+    padding: 40,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 340,
+    borderWidth: 1,
+    borderColor: 'rgba(218, 165, 32, 0.2)',
+  },
+  iconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(218, 165, 32, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24
+  },
+  title: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: '800',
+    marginBottom: 8
+  },
+  subtitle: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 20
+  },
+  button: {
+    backgroundColor: '#DAA520',
+    paddingHorizontal: 40,
+    paddingVertical: 16,
+    borderRadius: 15,
+    width: '100%',
+    alignItems: 'center'
+  },
+  buttonText: {
+    color: '#0a192f',
+    fontSize: 16,
+    fontWeight: '700'
   }
 });

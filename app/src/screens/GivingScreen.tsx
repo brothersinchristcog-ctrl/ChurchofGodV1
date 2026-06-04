@@ -11,12 +11,14 @@ import {
   ActivityIndicator,
   Alert,
   StatusBar,
-  Platform
+  Platform,
+  Share
 } from 'react-native';
 import { 
   Lock, 
   Coins,
-  CreditCard
+  CreditCard,
+  Share2
 } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -71,9 +73,8 @@ export default function GivingScreen({ navigation }: any) {
         accountId: member?.accountId || '',
         phone: user?.phoneNumber || ''
       });
-
-      const vpa = 'shafishafi57428@ybl';
-      const payee = 'Lalsagari Shaik Shafiulla';
+      const vpa = '8000504070@ybl';
+      const payee = 'Church of God';
       const upiUrl = `upi://pay?pa=${vpa}&pn=${encodeURIComponent(payee)}&am=${numAmt}&cu=INR`;
 
       const canOpen = await Linking.canOpenURL(upiUrl);
@@ -86,6 +87,17 @@ export default function GivingScreen({ navigation }: any) {
       Alert.alert('Error', 'Unable to initiate payment. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCopy = async (text: string, label: string) => {
+    try {
+      await Share.share({
+        message: text,
+      });
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Error', 'Failed to share details.');
     }
   };
 
@@ -172,6 +184,41 @@ export default function GivingScreen({ navigation }: any) {
               </View>
             )}
           </TouchableOpacity>
+
+          {/* UPI Copy Box */}
+          <View style={[styles.upiInfoCard, { backgroundColor: isDark ? '#1e293b' : '#f8fafc', borderColor: isDark ? '#334155' : '#e2e8f0' }]}>
+            <Text style={[styles.upiSectionTitle, { color: isDark ? '#fcd34d' : '#1a2d5a' }]}>Direct Transfer / PhonePe Details</Text>
+            
+            <View style={styles.upiDetailRow}>
+              <View>
+                <Text style={styles.upiLabel}>PHONEPE NUMBER</Text>
+                <Text style={[styles.upiValue, { color: isDark ? '#fff' : '#1e293b' }]}>8000504070</Text>
+              </View>
+              <TouchableOpacity 
+                style={[styles.copyBtn, { backgroundColor: isDark ? '#334155' : '#eff6ff' }]} 
+                onPress={() => handleCopy('8000504070', 'PhonePe Number')}
+              >
+                <Share2 size={14} color={isDark ? '#fcd34d' : '#1a2d5a'} />
+                <Text style={[styles.copyBtnTxt, { color: isDark ? '#fcd34d' : '#1a2d5a' }]}>Copy/Share</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.upiDivider, { backgroundColor: isDark ? '#334155' : '#e2e8f0' }]} />
+
+            <View style={styles.upiDetailRow}>
+              <View>
+                <Text style={styles.upiLabel}>UPI ID</Text>
+                <Text style={[styles.upiValue, { color: isDark ? '#fff' : '#1e293b' }]}>8000504070@ybl</Text>
+              </View>
+              <TouchableOpacity 
+                style={[styles.copyBtn, { backgroundColor: isDark ? '#334155' : '#eff6ff' }]} 
+                onPress={() => handleCopy('8000504070@ybl', 'UPI ID')}
+              >
+                <Share2 size={14} color={isDark ? '#fcd34d' : '#1a2d5a'} />
+                <Text style={[styles.copyBtnTxt, { color: isDark ? '#fcd34d' : '#1a2d5a' }]}>Copy/Share</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
 
           <View style={styles.securityFooter}>
              <Lock size={12} color="#94a3b8" />
@@ -266,4 +313,49 @@ const styles = StyleSheet.create({
 
   securityFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 15 },
   securityText: { fontSize: 10, color: '#94a3b8', fontWeight: '500' },
+  
+  // UPI Card styles
+  upiInfoCard: {
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 20,
+    borderWidth: 1,
+  },
+  upiSectionTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    marginBottom: 12,
+  },
+  upiDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  upiLabel: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#94a3b8',
+    letterSpacing: 0.5,
+  },
+  upiValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  copyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    gap: 6,
+  },
+  copyBtnTxt: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  upiDivider: {
+    height: 1,
+    marginVertical: 12,
+  },
 });

@@ -24,7 +24,8 @@ import {
   FileText,
   Activity
 } from 'lucide-react-native';
-import { AdminTabContext } from '../../navigation/AdminNavigator';
+import { AdminTabContext } from '../../context/AdminTabContext';
+
 import SalesforceService from '../../services/SalesforceService';
 
 const { width } = Dimensions.get('window');
@@ -60,9 +61,11 @@ export default function AdminDashboard() {
 
   const QUICK_ACTIONS = [
     { id: 2, label: 'Promises', icon: <BookOpen size={20} color="#1a2d5a" />, desc: 'Update Daily Verse' },
-    { id: 3, label: 'Events', icon: <Calendar size={20} color="#c0392b" />, desc: 'Manage Calendar' },
-    { id: 4, label: 'Sermons', icon: <Video size={20} color="#15803D" />, desc: 'Post Teachings' },
-    { id: 5, label: 'Members', icon: <Users size={20} color="#D97706" />, desc: 'Directory' }
+    { id: 7, label: 'Events', icon: <Calendar size={20} color="#c0392b" />, desc: 'Manage Calendar' },
+    { id: 3, label: 'Sermons', icon: <Video size={20} color="#15803D" />, desc: 'Post Teachings' },
+    { id: 5, label: 'New Song', icon: <Plus size={20} color="#8B5CF6" />, desc: 'Post Song Lyrics' },
+    { id: 6, label: 'Broadcast', icon: <Bell size={20} color="#EA580C" />, desc: 'Send Push Alerts' },
+    { id: 9, label: 'Prayers', icon: <Users size={20} color="#D97706" />, desc: 'Moderation' }
   ];
 
   if (loading) {

@@ -37,10 +37,31 @@ export declare class SalesforceBackend {
      */
     checkContact(phone: string): Promise<{
         exists: boolean;
-        name: string;
+        member: {
+            id: any;
+            accountId: any;
+            name: string;
+            firstName: any;
+            lastName: any;
+            email: any;
+            phone: any;
+            userType: any;
+            mailingCity: any;
+            mailingState: any;
+            mailingStreet: any;
+            joinDate: any;
+        };
     } | {
         exists: boolean;
-        name?: never;
+        member?: never;
     }>;
+    /**
+     * Fetches today's birthdays from Salesforce
+     */
+    getTodayBirthdays(): Promise<any[]>;
+    /**
+     * Fetches today's wedding anniversaries from Salesforce
+     */
+    getTodayAnniversaries(): Promise<any[]>;
 }
 //# sourceMappingURL=SalesforceBackend.d.ts.map

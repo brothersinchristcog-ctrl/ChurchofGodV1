@@ -123,7 +123,7 @@ class FirestoreService {
         .doc(userId)
         .get();
       
-      if (docSnap.exists) {
+      if (docSnap.exists()) {
         return docSnap.data()?.notifications || null;
       }
       return null;

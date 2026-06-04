@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import Theme from '../../theme/Theme';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 export default function SplashScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -141,4 +141,4 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
   }
 });
-const { height } = Dimensions.get('window');
+

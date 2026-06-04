@@ -9,7 +9,8 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
-  StatusBar
+  StatusBar,
+  ScrollView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -22,7 +23,7 @@ import { ChevronLeft, ShieldCheck, RefreshCw } from 'lucide-react-native';
 type VerifyOtpScreenProps = NativeStackScreenProps<AuthStackParamList, 'VerifyOtp'>;
 
 export default function VerifyOtpScreen({ route, navigation }: VerifyOtpScreenProps) {
-  const { confirmation, phoneNumber, contactId } = route.params;
+  const { confirmation, phoneNumber, contactId, memberName } = route.params;
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
@@ -37,20 +38,22 @@ export default function VerifyOtpScreen({ route, navigation }: VerifyOtpScreenPr
     setStatus('Verifying your code...');
     
     try {
-      let result;
-      // 🧪 [DEBUG BYPASS]
-      if (code === '123456') {
-        console.log('🧪 [DEBUG] Using OTP Bypass');
-        result = { user: { uid: 'DEBUG_USER_' + phoneNumber.slice(-10) } };
-        await auth().signInAnonymously();
-      } else {
-        result = await confirmation.confirm(code);
-      }
-      
+      const result = await confirmation.confirm(code);
+
       if (result?.user && contactId) {
         setStatus('Linking church profile...');
         try {
           await SalesforceService.syncMember(contactId, result.user.uid);
+          
+          // Save profile details to Firestore so Push Notifications can match them by name
+          const firestore = require('@react-native-firebase/firestore').default;
+          await firestore().collection('users').doc(result.user.uid).set({
+            name: memberName || '',
+            phone: phoneNumber || '',
+            role: 'Member',
+            onboardingComplete: true
+          }, { merge: true });
+          console.log('✨ Saved member profile to Firestore successfully!');
         } catch (syncError) {
           console.error('❌ Sync failed:', syncError);
         }
@@ -85,51 +88,63 @@ export default function VerifyOtpScreen({ route, navigation }: VerifyOtpScreenPr
           <View style={{ width: 60 }} />
         </View>
 
-        <View style={styles.content}>
-          <View style={styles.infoSection}>
-            <View style={styles.iconCircle}>
-              <ShieldCheck size={32} color="#1a2d5a" />
+        <ScrollView 
+          showsVerticalScrollIndicator={false} 
+          contentContainerStyle={styles.scrollContent}
+        >
+          <View style={styles.content}>
+            <View style={styles.infoSection}>
+              <View style={styles.iconCircle}>
+                <ShieldCheck size={32} color="#1a2d5a" />
+              </View>
+              <Text style={styles.authTitle}>Verify your phone</Text>
+              <Text style={styles.authSub}>We sent a 6-digit code to</Text>
+              <Text style={styles.phoneTxt}>{phoneNumber}</Text>
+
+              {memberName ? (
+                <View style={styles.memberBanner}>
+                  <Text style={styles.memberBannerTxt}>Welcome, {memberName} 🙏</Text>
+                  <Text style={styles.memberBannerSub}>Please verify your identity.</Text>
+                </View>
+              ) : null}
             </View>
-            <Text style={styles.authTitle}>Verify your phone</Text>
-            <Text style={styles.authSub}>We sent a 6-digit code to</Text>
-            <Text style={styles.phoneTxt}>{phoneNumber}</Text>
-          </View>
 
-          <View style={styles.inputSection}>
-            <Text style={styles.inputLabel}>ENTER 6-DIGIT CODE</Text>
-            <View style={styles.codeContainer}>
-              <TextInput
-                style={styles.codeInput}
-                placeholder="000 000"
-                placeholderTextColor="#D1D5DB"
-                keyboardType="number-pad"
-                maxLength={6}
-                value={code}
-                onChangeText={setCode}
-                autoFocus
-              />
+            <View style={styles.inputSection}>
+              <Text style={styles.inputLabel}>ENTER 6-DIGIT CODE</Text>
+              <View style={styles.codeContainer}>
+                <TextInput
+                  style={styles.codeInput}
+                  placeholder="000 000"
+                  placeholderTextColor="#D1D5DB"
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  value={code}
+                  onChangeText={setCode}
+                  autoFocus
+                />
+              </View>
             </View>
+
+            <TouchableOpacity 
+              style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
+              onPress={handleVerify}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.submitBtnTxt}>Verify & Sign In</Text>
+              )}
+            </TouchableOpacity>
+
+            {status ? <Text style={styles.statusTxt}>{status}</Text> : null}
+
+            <TouchableOpacity style={styles.resendBtn} disabled={loading}>
+              <RefreshCw size={16} color="#6B7280" />
+              <Text style={styles.resendTxt}>Resend Code</Text>
+            </TouchableOpacity>
           </View>
-
-          <TouchableOpacity 
-            style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
-            onPress={handleVerify}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.submitBtnTxt}>Verify & Sign In</Text>
-            )}
-          </TouchableOpacity>
-
-          {status ? <Text style={styles.statusTxt}>{status}</Text> : null}
-
-          <TouchableOpacity style={styles.resendBtn} disabled={loading}>
-            <RefreshCw size={16} color="#6B7280" />
-            <Text style={styles.resendTxt}>Resend Code</Text>
-          </TouchableOpacity>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     </KeyboardAvoidingView>
   );
@@ -155,7 +170,8 @@ const styles = StyleSheet.create({
   pageTitle: { color: '#fff', fontSize: 14, fontWeight: '600' },
   pageSub: { color: '#aac4e8', fontSize: 9, marginTop: 1 },
 
-  content: { flex: 1, paddingHorizontal: 25, paddingTop: 40, alignItems: 'center' },
+  content: { width: '100%', paddingHorizontal: 25, paddingTop: 40, alignItems: 'center', paddingBottom: 40 },
+  scrollContent: { flexGrow: 1 },
   
   infoSection: { alignItems: 'center', marginBottom: 40 },
   iconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#f0f2f7', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
@@ -179,4 +195,18 @@ const styles = StyleSheet.create({
 
   resendBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 30 },
   resendTxt: { fontSize: 14, color: '#6B7280', fontWeight: '600' },
+  
+  memberBanner: { 
+    backgroundColor: '#f8fafc', 
+    padding: 18, 
+    borderRadius: 16, 
+    marginTop: 25, 
+    borderWidth: 1, 
+    borderColor: '#e2e8f0',
+    borderLeftWidth: 4,
+    borderLeftColor: '#c0392b',
+    width: '100%'
+  },
+  memberBannerTxt: { color: '#1a2d5a', fontSize: 16, fontWeight: '800' },
+  memberBannerSub: { color: '#64748b', fontSize: 12, marginTop: 4 },
 });

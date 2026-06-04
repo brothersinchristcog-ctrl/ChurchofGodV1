@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { 
   StyleSheet, 
   View, 
@@ -27,7 +27,10 @@ import {
   ChevronRight,
   CheckCircle2
 } from 'lucide-react-native';
-import { AdminTabContext } from '../../navigation/AdminNavigator';
+import { AdminTabContext } from '../../context/AdminTabContext';
+import * as MediaLibrary from 'expo-media-library';
+import { captureRef } from 'react-native-view-shot';
+
 import SalesforceService from '../../services/SalesforceService';
 
 const { width } = Dimensions.get('window');
@@ -63,6 +66,8 @@ export default function AdminPromiseEditor() {
     enVerse: '',
     enNote: '',
     teVerse: '',
+    teRef: '',
+    teNote: '',
     ytUrl: '',
     videoTitle: '',
     duration: '',
@@ -104,6 +109,8 @@ export default function AdminPromiseEditor() {
         enVerse: '',
         enNote: '',
         teVerse: '',
+        teRef: '',
+        teNote: '',
         ytUrl: '',
         videoTitle: '',
         duration: '',
@@ -117,6 +124,7 @@ export default function AdminPromiseEditor() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const viewShotRef = useRef(null);
 
   const handleSaveToGallery = async () => {
     try {

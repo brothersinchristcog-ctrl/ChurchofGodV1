@@ -54,7 +54,7 @@ export default function EventsCalendarScreen() {
     }
   };
 
-  const formatEventDate = (dateStr: string) => {
+  const formatEventDate = (dateStr?: string) => {
     if (!dateStr) return { day: '--', month: '---' };
     const d = new Date(dateStr);
     return {
@@ -63,7 +63,8 @@ export default function EventsCalendarScreen() {
     };
   };
 
-  const getCategoryColor = (name: string) => {
+  const getCategoryColor = (name?: string) => {
+    if (!name) return '#2c3e50';
     const n = name.toLowerCase();
     if (n.includes('service')) return '#1565c0';
     if (n.includes('youth')) return '#f39c12';

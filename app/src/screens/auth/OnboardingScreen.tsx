@@ -13,7 +13,7 @@ import {
   Dimensions,
   ScrollView
 } from 'react-native';
-import { db as firestore, FieldValue } from '../../services/firebaseConfig';
+import { firestore, FieldValue } from '../../services/firebaseConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
 import { User, Globe, MapPin, ArrowRight, ShieldCheck } from 'lucide-react-native';

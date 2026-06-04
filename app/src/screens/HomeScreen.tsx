@@ -13,7 +13,9 @@ import {
   StatusBar,
   Platform,
   ImageBackground,
-  Share
+  Share,
+  Modal,
+  Linking
 } from 'react-native';
 import { 
   Bell, 
@@ -32,13 +34,26 @@ import {
   MoreHorizontal,
   CheckCircle,
   Sun,
-  Moon
+  Moon,
+  Award,
+  Music,
+  FileText,
+  X,
+  Phone,
+  Mail
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import Theme from '../theme/Theme';
 import SalesforceService, { DailyPromise, ScheduleEvent, SalesforceMember, Sermon } from '../services/SalesforceService';
 import Svg, { Path, Circle, Rect, Polygon } from 'react-native-svg';
+
+const YoutubeIcon = ({ size = 26, color = '#fff' }: { size?: number; color?: string }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+    <Path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.517 3.545 12 3.545 12 3.545s-7.517 0-9.388.507a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.871.507 9.388.507 9.388.507s7.517 0 9.388-.507a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837z" />
+    <Polygon points="9.5 8.5 15.5 12 9.5 15.5" fill="#ef4444" />
+  </Svg>
+);
 
 const { width } = Dimensions.get('window');
 
@@ -65,31 +80,44 @@ export default function HomeScreen() {
 
   const fetchData = async () => {
     try {
-      // 1. Fetch Member Details
-      if (user?.phoneNumber) {
-        const contactCheck = await SalesforceService.checkContactExists(user.phoneNumber);
-        if (contactCheck?.exists && contactCheck.member) {
-          setMember(contactCheck.member);
-        }
+      // Run ALL Salesforce calls in parallel for maximum speed
+      const [memberResult, promiseResult, eventsResult, sermonsResult, prayersResult] = await Promise.allSettled([
+        // 1. Fetch Member Details
+        user?.phoneNumber ? SalesforceService.checkContactExists(user.phoneNumber) : Promise.resolve(null),
+        // 2. Fetch Daily Promise
+        SalesforceService.getDailyPromise(),
+        // 3. Fetch Upcoming Events
+        SalesforceService.getUpcomingEvents(3),
+        // 4. Fetch Latest Sermon
+        SalesforceService.getSermons(1),
+        // 5. Fetch Latest Prayer
+        (async () => {
+          if (!user?.phoneNumber) return [];
+          const res = await SalesforceService.checkContactExists(user.phoneNumber);
+          if (res?.member?.id) {
+            return await SalesforceService.getPrayerRequests({ contactId: res.member.id });
+          }
+          return [];
+        })()
+      ]);
+
+      // Process results safely
+      if (memberResult.status === 'fulfilled' && memberResult.value?.exists && memberResult.value.member) {
+        setMember(memberResult.value.member);
+        SalesforceService.updateLastAppOpened(memberResult.value.member.id);
       }
-
-      // 2. Fetch Daily Promise
-      const sfPromise = await SalesforceService.getDailyPromise();
-      if (sfPromise) setPromise(sfPromise);
-
-      // 3. Fetch Upcoming Events
-      const sfEvents = await SalesforceService.getUpcomingEvents(3);
-      setEvents(sfEvents);
-
-      // 4. Fetch Latest Sermon
-      const sfSermons = await SalesforceService.getSermons(1);
-      if (sfSermons.length > 0) setLatestSermon(sfSermons[0]);
-
-      // 5. Fetch Latest Prayer
-      const sfPrayers = await SalesforceService.getPrayerRequests();
-      if (sfPrayers.length > 0) {
-        setLatestPrayer(sfPrayers[0]);
-        setPrayerCount(sfPrayers.length);
+      if (promiseResult.status === 'fulfilled' && promiseResult.value) {
+        setPromise(promiseResult.value);
+      }
+      if (eventsResult.status === 'fulfilled') {
+        setEvents(eventsResult.value || []);
+      }
+      if (sermonsResult.status === 'fulfilled' && sermonsResult.value?.length > 0) {
+        setLatestSermon(sermonsResult.value[0]);
+      }
+      if (prayersResult.status === 'fulfilled' && prayersResult.value?.length > 0) {
+        setLatestPrayer(prayersResult.value[0]);
+        setPrayerCount(prayersResult.value.length);
       }
 
     } catch (error) {
@@ -98,6 +126,18 @@ export default function HomeScreen() {
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  const handleOpenMembers = () => {
+    if (!member) {
+      Alert.alert('Sign In Required', 'Please complete your profile configuration first.');
+      return;
+    }
+    if (!member.accountId) {
+      Alert.alert('No Household Linked', 'Your profile is not linked to any household. Please contact the administrator.');
+      return;
+    }
+    navigation.navigate('Members');
   };
 
   const handleSharePromise = async () => {
@@ -170,11 +210,25 @@ export default function HomeScreen() {
 
   const upcomingEvents = events;
 
+  const handleMakeCall = (phoneNumber: string) => {
+    if (!phoneNumber) return;
+    Linking.openURL(`tel:${phoneNumber}`).catch(() => {
+      Alert.alert('Error', 'Unable to initiate phone call.');
+    });
+  };
+
+  const handleSendEmail = (email: string) => {
+    if (!email) return;
+    Linking.openURL(`mailto:${email}`).catch(() => {
+      Alert.alert('Error', 'Unable to open email client.');
+    });
+  };
+
   if (loading && !refreshing) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: colors.primary }]}>
-        <ActivityIndicator size="large" color={colors.gold} />
-        <Text style={styles.loadingText}>Church of GOD — A Gateway to Heaven</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: '#1a2d5a' }]}>
+        <ActivityIndicator size="large" color="#FCD34D" />
+        <Text style={styles.screenLoadingText}>Church of GOD — A Gateway to Heaven</Text>
       </View>
     );
   }
@@ -287,9 +341,15 @@ export default function HomeScreen() {
             <GridItem icon={<DollarSign size={26} color="#fff" />} label="Give / Tithe" color="#f0a500" onPress={() => navigation.navigate('Give')} />
             
             <GridItem icon={<BookOpen size={26} color="#fff" />} label="Bible" color="#7C3AED" onPress={() => navigation.navigate('Bible')} />
-            <GridItem icon={<Bell size={26} color="#fff" />} label="Updates" color="#0369a1" onPress={() => Alert.alert('Updates', 'Announcements coming soon!')} />
-            <GridItem icon={<Users size={26} color="#fff" />} label="Members" color="#BE185D" onPress={() => Alert.alert('Directory', 'Member directory coming soon!')} />
-            <GridItem icon={<MoreHorizontal size={26} color="#fff" />} label="More" color="#374151" onPress={() => Alert.alert('More', 'More features coming soon!')} />
+            <GridItem icon={<Music size={26} color="#fff" />} label="Songs" color="#0369a1" onPress={() => navigation.navigate('Songs')} />
+            <GridItem icon={<FileText size={26} color="#fff" />} label="Sermon Notes" color="#BE185D" onPress={() => navigation.navigate('MemberNotes')} />
+            <GridItem icon={<Award size={26} color="#fff" />} label="Bible Plans" color="#374151" onPress={() => navigation.navigate('BiblePlans')} />
+
+            <GridItem icon={<Bell size={26} color="#fff" />} label="Updates" color="#0284c7" onPress={() => navigation.navigate('Updates')} />
+            <GridItem icon={<YoutubeIcon size={26} color="#fff" />} label="YouTube Live" color="#ef4444" onPress={() => Linking.openURL('https://www.youtube.com/@Brothersinchristfellowship/live')} />
+            <GridItem icon={<Users size={26} color="#fff" />} label="Members" color="#db2777" onPress={handleOpenMembers} />
+            <GridItem icon={<Sun size={26} color="#fff" />} label="Devotion" color="#b45309" onPress={() => Alert.alert('Daily Devotion', 'Devotion feeds coming soon!')} />
+            <GridItem icon={<MoreHorizontal size={26} color="#fff" />} label="More" color="#64748b" onPress={() => Alert.alert('More Features', 'More features coming soon!')} />
           </View>
 
           {/* ── Next Event Banner (Always Visible) ── */}
@@ -317,7 +377,7 @@ export default function HomeScreen() {
                         <Image 
                           source={{ uri: item.image || 'https://images.unsplash.com/photo-1438232992991-995b7058bbb3?q=80&w=400' }}
                           style={styles.ebThumbnail}
-                          resizeMode="contain"
+                          resizeMode="cover"
                         />
                       </View>
                       <View style={styles.ebInfo}>
@@ -417,6 +477,8 @@ export default function HomeScreen() {
           </View>
         </View>
       </ScrollView>
+
+
     </View>
   );
 }
@@ -436,6 +498,7 @@ const styles = StyleSheet.create({
   mainContainer: { flex: 1, backgroundColor: '#f8fafc', paddingBottom: 120 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a2d5a' },
   loadingText: { color: '#fbbf24', marginTop: 15, fontSize: 14, fontWeight: '600' },
+  screenLoadingText: { color: '#FCD34D', marginTop: 15, fontSize: 14, fontWeight: '700' },
   
   scroll: { flex: 1 },
   contentPad: { paddingBottom: 20 },
@@ -527,8 +590,8 @@ const styles = StyleSheet.create({
   ebList: { padding: 0 },
   ebItem: { flexDirection: 'row', padding: 15, alignItems: 'center' },
   ebDivider: { height: 1, backgroundColor: '#f1f5f9', marginHorizontal: 15 },
-  ebThumbnailContainer: { width: 85, height: 85, backgroundColor: 'transparent', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  ebThumbnail: { width: '100%', height: '100%', borderRadius: 8 },
+  ebThumbnailContainer: { width: 100, height: 56, backgroundColor: 'transparent', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  ebThumbnail: { width: 100, height: 56, borderRadius: 8 },
   ebInfo: { flex: 1 },
   ebTitle: { fontSize: 13.5, fontWeight: '800', color: '#1a2d5a', marginBottom: 5 },
   ebDetailsLink: { fontSize: 10, fontWeight: '800', color: '#1a2d5a', marginTop: 8 },
@@ -598,4 +661,128 @@ const styles = StyleSheet.create({
   prayedBtn: { backgroundColor: '#f5f3ff', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#ddd6fe' },
   prayedBtnTxt: { color: '#4C1D95', fontSize: 12, fontWeight: '700' },
   pcSeeAll: { fontSize: 11.5, color: '#94a3b8', fontWeight: '600' },
+
+  // Modal Styles for Household Members
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    maxHeight: '80%',
+    borderRadius: 24,
+    overflow: 'hidden',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 15,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+  },
+  modalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  modalSubtitle: {
+    fontSize: 11,
+    color: '#94a3b8',
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  closeBtn: {
+    padding: 8,
+  },
+  modalLoading: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalLoadingText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  ebMetaText: {
+    fontSize: 10, 
+    color: '#64748b', 
+    fontWeight: '500', 
+    lineHeight: 14
+  },
+  modalScroll: {
+    padding: 20,
+  },
+  noFamily: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  noFamilyText: {
+    fontSize: 13,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  contactCard: {
+    paddingVertical: 16,
+  },
+  contactHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  contactAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#1a2d5a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  contactAvatarText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  contactInfo: {
+    flex: 1,
+  },
+  contactName: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  roleBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 4,
+  },
+  roleBadgeText: {
+    color: '#1e40af',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  contactDetails: {
+    marginTop: 12,
+    paddingLeft: 56,
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
 });

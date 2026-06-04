@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
   View, 
@@ -10,7 +10,9 @@ import {
   Dimensions,
   Platform,
   Share,
-  Alert
+  Alert,
+  Linking,
+  ActivityIndicator
 } from 'react-native';
 import { 
   Calendar, 
@@ -19,8 +21,11 @@ import {
   ChevronLeft, 
   Share2, 
   Info,
-  Play
+  Play,
+  Video
 } from 'lucide-react-native';
+import YoutubePlayer from 'react-native-youtube-iframe';
+import { findEventVideo } from '../services/YouTubeService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -60,6 +65,34 @@ export default function EventDetailsScreen({ route, navigation }: any) {
     Alert.alert("Success · విజయం", "Thank you for your interest! We'll keep you updated.\nమీ ఆసక్తికి ధన్యవాదాలు! మేము మిమ్మల్ని అప్‌డేట్ చేస్తాము.");
   };
 
+  const extractYoutubeIdFromText = (text: string) => {
+    if (!text) return null;
+    const regExp = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:(?:v|e(?:mbed)?)\/|\S*?[?&]v=|shorts\/|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+    const match = text.match(regExp);
+    return match ? match[1] : null;
+  };
+
+  const isPast = new Date(event.date) < new Date();
+  const manualYoutubeId = event.youtubeId || extractYoutubeIdFromText(event.description || event.descEn);
+
+  const [autoYoutubeId, setAutoYoutubeId] = useState<string | null>(null);
+  const [videoSearching, setVideoSearching] = useState(false);
+
+  useEffect(() => {
+    // Only search YouTube if it's a past event and no manual ID was provided
+    if (isPast && !manualYoutubeId) {
+      setVideoSearching(true);
+      findEventVideo(event.date, event.title || event.name || '')
+        .then(id => {
+          setAutoYoutubeId(id);
+        })
+        .finally(() => setVideoSearching(false));
+    }
+  }, [event.id]);
+
+  const youtubeId = manualYoutubeId || autoYoutubeId;
+  console.log('🎬 EventDetailsScreen -> isPast:', isPast, '| final youtubeId:', youtubeId);
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
@@ -68,9 +101,9 @@ export default function EventDetailsScreen({ route, navigation }: any) {
         {/* --- Hero Image Section --- */}
         <View style={styles.heroContainer}>
           <Image 
-            source={{ uri: event.image || 'https://images.unsplash.com/photo-1438232992991-995b7058bbb3?q=80&w=800' }}
+            source={{ uri: event.image || event.bannerUrl || 'https://images.unsplash.com/photo-1438232992991-995b7058bbb3?q=80&w=800' }}
             style={styles.heroImage}
-            resizeMode="contain"
+            resizeMode="cover"
           />
           
           {/* Header Actions */}
@@ -148,10 +181,53 @@ export default function EventDetailsScreen({ route, navigation }: any) {
             </View>
             <View style={styles.descCard}>
               <Text style={styles.description}>
-                {event.description || "Join us for a powerful time of prayer and fellowship. We invite all members to gather as we seek God's presence together.\n\n'For where two or three gather in my name, there am I with them.' - Matthew 18:20"}
+                {event.description || event.descEn || "Join us for a powerful time of prayer and fellowship. We invite all members to gather as we seek God's presence together.\n\n'For where two or three gather in my name, there am I with them.' - Matthew 18:20"}
               </Text>
             </View>
           </View>
+
+          {/* Past Event Recording Section */}
+          {isPast && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <View style={[styles.iconCircle, { backgroundColor: '#fee2e2' }]}>
+                  <Video size={18} color="#dc2626" />
+                </View>
+                <Text style={styles.sectionTitle}>EVENT RECORDING · కార్యక్రమం వీడియో</Text>
+              </View>
+
+              {videoSearching ? (
+                // State 1: Searching YouTube — show a loading spinner
+                <View style={styles.videoSearching}>
+                  <ActivityIndicator size="large" color="#dc2626" />
+                  <Text style={styles.videoSearchingText}>Finding event recording...</Text>
+                  <Text style={styles.videoSearchingSubText}>వీడియో శోధిస్తున్నాం...</Text>
+                </View>
+              ) : youtubeId ? (
+                // State 2: Found the video — embed the player
+                <View style={styles.videoContainer}>
+                  <YoutubePlayer
+                    key={youtubeId}
+                    height={width * 0.55}
+                    play={false}
+                    videoId={youtubeId}
+                  />
+                </View>
+              ) : (
+                // State 3: Not found — show the generic channel button
+                <TouchableOpacity
+                  style={styles.youtubeChannelBtn}
+                  onPress={() => Linking.openURL('https://www.youtube.com/@Brothersinchristfellowship/streams')}
+                >
+                  <Play size={20} color="#fff" fill="#fff" />
+                  <View>
+                    <Text style={styles.youtubeChannelBtnText}>Watch on YouTube Channel</Text>
+                    <Text style={styles.youtubeChannelBtnSub}>@Brothersinchristfellowship</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
           
           <View style={{ height: 120 }} />
         </View>
@@ -169,7 +245,7 @@ export default function EventDetailsScreen({ route, navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a2d5a' },
-  heroContainer: { width: '100%', height: height * 0.45, backgroundColor: '#fff' },
+  heroContainer: { width: '100%', height: height * 0.28, backgroundColor: '#fff' },
   heroImage: { width: '100%', height: '100%' },
   headerActions: {
     position: 'absolute',
@@ -256,6 +332,54 @@ const styles = StyleSheet.create({
   descCard: { backgroundColor: '#fff', borderRadius: 20, padding: 18, borderWidth: 1, borderColor: '#f1f5f9' },
   description: { fontSize: 15, color: '#475569', lineHeight: 26, fontWeight: '400' },
   
+  videoContainer: {
+    backgroundColor: '#000',
+    elevation: 5,
+    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10
+  },
+  youtubeChannelBtn: {
+    backgroundColor: '#dc2626',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 18,
+    borderRadius: 16,
+    gap: 14,
+    elevation: 3,
+    shadowColor: '#dc2626', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }
+  },
+  youtubeChannelBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700'
+  },
+  youtubeChannelBtnSub: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 2
+  },
+  videoSearching: {
+    backgroundColor: '#fff5f5',
+    borderRadius: 16,
+    padding: 28,
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#fee2e2'
+  },
+  videoSearchingText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#dc2626',
+    marginTop: 6
+  },
+  videoSearchingSubText: {
+    fontSize: 12,
+    color: '#94a3b8',
+    fontWeight: '500'
+  },
+
   bottomBar: {
     position: 'absolute',
     bottom: 0, left: 0, right: 0,

@@ -114,6 +114,9 @@ export default function PrayerWallScreen({ navigation }: any) {
   const [prayers, setPrayers] = useState<PrayerRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [prayedSet, setPrayedSet] = useState(new Set<string>());
+  const [replyInputs, setReplyInputs] = useState<{[key: string]: string}>({});
+  const [submittingReplyId, setSubmittingReplyId] = useState<string | null>(null);
   
   // Form State
   const [prayerInput, setPrayerInput] = useState('');
@@ -129,10 +132,10 @@ export default function PrayerWallScreen({ navigation }: any) {
     { label: 'Other (if necessary)', icon: '✨' }
   ];
 
-  const fetchPrayers = async (isRefreshing = false) => {
+  const fetchPrayers = async (contactId?: string, isRefreshing = false) => {
     if (!isRefreshing) setLoading(true);
     try {
-      const data = await SalesforceService.getPrayerRequests({ filter: 'All' });
+      const data = await SalesforceService.getPrayerRequests({ contactId });
       setPrayers(data);
     } catch (error) {
       console.error('Error fetching prayers:', error);
@@ -143,21 +146,23 @@ export default function PrayerWallScreen({ navigation }: any) {
   };
 
   useEffect(() => {
-    const fetchMember = async () => {
+    const init = async () => {
+      let contactId = undefined;
       if (user?.phoneNumber) {
         const result = await SalesforceService.checkContactExists(user.phoneNumber);
         if (result?.exists && result.member) {
           setMember(result.member);
+          contactId = result.member.id;
         }
       }
+      fetchPrayers(contactId, false);
     };
-    fetchMember();
-    fetchPrayers();
+    init();
   }, [user]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchPrayers(true);
+    fetchPrayers(member?.id || undefined, true);
   };
 
   const handleSubmit = async () => {
@@ -170,7 +175,8 @@ export default function PrayerWallScreen({ navigation }: any) {
     try {
       await SalesforceService.submitPrayerRequest({
         name: member?.name || user?.displayName || 'Faithful Member',
-        phone: user?.phoneNumber,
+        phone: user?.phoneNumber || '',
+        contactId: member?.id || null,
         request: prayerInput,
         category: category,
         isAnonymous: false
@@ -178,7 +184,7 @@ export default function PrayerWallScreen({ navigation }: any) {
       
       setShowSuccess(true);
       setPrayerInput('');
-      fetchPrayers(true);
+      fetchPrayers(member?.id || undefined, true);
     } catch (err) {
       Alert.alert('Error', 'Unable to submit request. Please try again.');
     } finally {
@@ -196,12 +202,28 @@ export default function PrayerWallScreen({ navigation }: any) {
     return Math.floor(hours / 24) + " days ago";
   };
 
-  const handleMarkAnswered = async (id: string) => {
+  const handlePray = (id: string, isOwner: boolean) => {
+    if (isOwner || prayedSet.has(id)) return;
+    
+    setPrayedSet(prev => new Set(prev).add(id));
+    setPrayers(prevPrayers => 
+      prevPrayers.map(p => p.id === id ? { ...p, prayCount: (p.prayCount || 0) + 1 } : p)
+    );
+  };
+
+  const handleReplySubmit = async (caseId: string) => {
+    const comment = replyInputs[caseId]?.trim();
+    if (!comment) return;
+    
+    setSubmittingReplyId(caseId);
     try {
-      await SalesforceService.markAsAnswered(id);
-      fetchPrayers(true);
+      await SalesforceService.addPrayerComment(caseId, comment);
+      setReplyInputs(prev => ({ ...prev, [caseId]: '' }));
+      fetchPrayers(member?.id || undefined, true);
     } catch (err) {
-      Alert.alert('Error', 'Failed to update status');
+      Alert.alert('Error', 'Unable to post comment. Please try again.');
+    } finally {
+      setSubmittingReplyId(null);
     }
   };
 
@@ -217,7 +239,7 @@ export default function PrayerWallScreen({ navigation }: any) {
           onPress: async () => {
             try {
               await SalesforceService.deletePrayerRequest(id);
-              fetchPrayers(true);
+              fetchPrayers(member?.id || undefined, true);
             } catch (err) {
               Alert.alert('Error', 'Failed to delete request');
             }
@@ -257,20 +279,72 @@ export default function PrayerWallScreen({ navigation }: any) {
           </Text>
         </View>
 
+        {/* REPLIES SECTION */}
+        {item.replies && item.replies.length > 0 && (
+          <View style={styles.repliesContainer}>
+            <Text style={styles.repliesHeader}>Comments & Replies</Text>
+            {item.replies.map((reply: any) => (
+              <View key={reply.id} style={styles.replyCard}>
+                <View style={styles.replyHeader}>
+                  <Text style={styles.replyAuthor}>{reply.author}</Text>
+                  <Text style={styles.replyDate}>{new Date(reply.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</Text>
+                </View>
+                <Text style={styles.replyBody}>{reply.body}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {isOwner && isAnswered && (
+          <View style={styles.addReplyContainer}>
+            <TextInput
+              style={styles.replyInput}
+              placeholder="Add a comment or thank you note..."
+              placeholderTextColor="#94a3b8"
+              value={replyInputs[item.id] || ''}
+              onChangeText={(text) => setReplyInputs(prev => ({ ...prev, [item.id]: text }))}
+              multiline
+            />
+            <TouchableOpacity 
+              style={[styles.replySubmitBtn, !replyInputs[item.id]?.trim() && styles.replySubmitBtnDisabled]}
+              onPress={() => handleReplySubmit(item.id)}
+              disabled={!replyInputs[item.id]?.trim() || submittingReplyId === item.id}
+            >
+              {submittingReplyId === item.id ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.replySubmitText}>Post</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={styles.cardFooter}>
-          <TouchableOpacity style={[styles.iprayedBtn, item.prayCount > 0 && !isAnswered && styles.iprayedBtnActive]}>
-            <CheckCircle2 size={14} color={isAnswered ? '#16a34a' : '#7c3aed'} />
-            <Text style={[styles.iprayedText, isAnswered && styles.iprayedTextAnswered]}>
-              {isAnswered ? 'We Prayed' : 'I prayed'}
-            </Text>
-          </TouchableOpacity>
+          {isOwner ? (
+            isAnswered ? (
+              <View style={[styles.iprayedBtn, styles.iprayedBtnActive, { backgroundColor: '#dcfce7', borderColor: '#dcfce7' }]}>
+                <CheckCircle2 size={14} color="#16a34a" />
+                <Text style={[styles.iprayedText, { color: '#16a34a' }]}>Answered</Text>
+              </View>
+            ) : (
+              <View style={[styles.iprayedBtn, { backgroundColor: '#f1f5f9', opacity: 0.7 }]}>
+                <Text style={[styles.iprayedText, { color: '#94a3b8' }]}>My Request</Text>
+              </View>
+            )
+          ) : (
+            <TouchableOpacity 
+              style={[styles.iprayedBtn, (prayedSet.has(item.id) || isAnswered) && styles.iprayedBtnActive]}
+              onPress={() => handlePray(item.id, isOwner)}
+              disabled={prayedSet.has(item.id) || isAnswered}
+            >
+              <CheckCircle2 size={14} color={prayedSet.has(item.id) || isAnswered ? '#16a34a' : '#7c3aed'} />
+              <Text style={[styles.iprayedText, (prayedSet.has(item.id) || isAnswered) && styles.iprayedTextAnswered]}>
+                {prayedSet.has(item.id) || isAnswered ? `We Prayed (${item.prayCount})` : `I prayed (${item.prayCount})`}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
-            {isOwner && !isAnswered && (
-              <TouchableOpacity onPress={() => handleMarkAnswered(item.id)}>
-                <CheckCircle2 size={20} color="#16a34a" />
-              </TouchableOpacity>
-            )}
             {isOwner && (
               <TouchableOpacity onPress={() => handleDelete(item.id)}>
                 <Trash2 size={20} color="#ef4444" />
@@ -388,8 +462,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.2)'
   },
   themeToggleText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-
-  listContainer: { paddingBottom: 40 },
+  listContainer: { paddingBottom: 150 },
 
   // Compose Card
   composeCard: { 
@@ -499,6 +572,53 @@ const styles = StyleSheet.create({
   prayerText: { fontSize: 15, color: '#334155', lineHeight: 24, fontStyle: 'italic' },
   prayerTextAnswered: { color: '#166534', fontWeight: '600' },
 
+  repliesContainer: { marginBottom: 15, marginLeft: 15, paddingLeft: 15, borderLeftWidth: 2, borderLeftColor: '#e2e8f0' },
+  repliesHeader: { fontSize: 13, fontWeight: '800', color: '#1a2d5a', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 },
+  replyCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#f1f5f9' },
+  replyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  replyAuthor: { fontSize: 13, fontWeight: '700', color: '#1a2d5a' },
+  replyDate: { fontSize: 11, color: '#94a3b8', fontWeight: '500' },
+  replyBody: { fontSize: 14, color: '#475569', lineHeight: 22 },
+
+  addReplyContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    paddingTop: 5,
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-end'
+  },
+  replyInput: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    paddingTop: 12,
+    paddingBottom: 12,
+    fontSize: 14,
+    color: '#1e293b',
+    minHeight: 44,
+    maxHeight: 100
+  },
+  replySubmitBtn: {
+    backgroundColor: '#c13b2d',
+    paddingHorizontal: 15,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  replySubmitBtnDisabled: {
+    backgroundColor: '#94a3b8'
+  },
+  replySubmitText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700'
+  },
+
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   iprayedBtn: { 
     backgroundColor: '#f1f5f9', 
@@ -549,8 +669,5 @@ const styles = StyleSheet.create({
     color: '#1a2d5a', 
     letterSpacing: 1.5,
     textTransform: 'uppercase'
-  },
-  listContainer: {
-    paddingBottom: 150,
-  },
+  }
 });

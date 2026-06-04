@@ -56,7 +56,7 @@ export default function DailyVideoScreen({ navigation, route }: any) {
             youtubeId: paramId,
             date: 'Today',
             duration: '',
-            pastor: paramPastor || 'Pastor Daniel Raju'
+            pastor: paramPastor || 'Brother Y. Rajesh'
           });
         }
       } else if (data.length > 0) {
@@ -133,14 +133,14 @@ export default function DailyVideoScreen({ navigation, route }: any) {
             </View>
             <View style={styles.metaItem}>
               <Clock size={12} color="#6B7280" />
-              <Text style={styles.metaTxt}>{activeVideo?.date ? new Date(activeVideo.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Today'}</Text>
+              <Text style={styles.metaTxt}>{activeVideo?.date ? (activeVideo.date === 'Today' ? 'Today' : new Date(activeVideo.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })) : 'Today'}</Text>
             </View>
           </View>
 
           <View style={styles.pastorCard}>
             <View style={styles.pastorAv}><Text style={styles.pastorAvTxt}>P</Text></View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.pastorName}>{activeVideo?.pastorName || 'Pastor Daniel Raju'}</Text>
+              <Text style={styles.pastorName}>{activeVideo?.pastor || 'Brother Y. Rajesh'}</Text>
               <Text style={styles.pastorRole}>Main Speaker · COG</Text>
             </View>
             <TouchableOpacity style={styles.subBtn} onPress={handleSubscribe}>

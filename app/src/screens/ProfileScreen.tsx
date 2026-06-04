@@ -31,7 +31,9 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import SalesforceService, { SalesforceMember } from '../services/SalesforceService';
+import SecurityService from '../services/SecurityService';
 import * as ImagePicker from 'expo-image-picker';
+import { Lock } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -45,11 +47,13 @@ export default function ProfileScreen({ navigation }: any) {
   const [isLanguageModalVisible, setIsLanguageModalVisible] = useState(false);
   const [isNotifyModalVisible, setIsNotifyModalVisible] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('Telugu');
+  const [localPhotoUrl, setLocalPhotoUrl] = useState<string | null>(null);
   
   // Notification States
   const [dailyPromiseNotify, setDailyPromiseNotify] = useState(true);
   const [newSermonNotify, setNewSermonNotify] = useState(true);
   const [eventReminderNotify, setEventReminderNotify] = useState(true);
+  const [prayerNotify, setPrayerNotify] = useState(false);
   const [editForm, setEditForm] = useState({
     firstName: '',
     lastName: '',
@@ -59,6 +63,8 @@ export default function ProfileScreen({ navigation }: any) {
     mailingState: ''
   });
   const [updating, setUpdating] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
 
   const fetchProfileData = async () => {
     try {
@@ -71,7 +77,8 @@ export default function ProfileScreen({ navigation }: any) {
             lastName: contactCheck.member.lastName || '',
             email: contactCheck.member.email || '',
             mailingCity: contactCheck.member.mailingCity || '',
-            mailingStreet: contactCheck.member.mailingStreet || ''
+            mailingStreet: contactCheck.member.mailingStreet || '',
+            mailingState: contactCheck.member.mailingState || ''
           });
         }
       }
@@ -111,27 +118,97 @@ export default function ProfileScreen({ navigation }: any) {
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
       const selectedUri = result.assets[0].uri;
-      try {
-        setUpdating(true);
-        // Update Firebase Auth Profile
-        if (user) {
-          await user.updateProfile({
-            photoURL: selectedUri
-          });
-          Alert.alert('Success', 'Profile photo updated successfully!');
-          // Force a refresh or just rely on Firebase state if it's live
-        }
-      } catch (error: any) {
-        Alert.alert('Error', 'Failed to update photo: ' + error.message);
-      } finally {
-        setUpdating(false);
-      }
+      
+      Alert.alert(
+        'Confirm Photo',
+        'Do you want to set this cropped image as your profile photo?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'OK', 
+            onPress: async () => {
+              try {
+                setUpdating(true);
+                // Update UI instantly for fast reflection
+                setLocalPhotoUrl(selectedUri);
+                // Update Firebase Auth Profile
+                if (user) {
+                  await user.updateProfile({
+                    photoURL: selectedUri
+                  });
+                  Alert.alert('Success', 'Profile photo updated successfully!');
+                }
+              } catch (error: any) {
+                Alert.alert('Error', 'Failed to update photo: ' + error.message);
+              } finally {
+                setUpdating(false);
+              }
+            }
+          }
+        ]
+      );
     }
   };
 
+  const handleRemovePhoto = async () => {
+    Alert.alert(
+      'Remove Photo',
+      'Are you sure you want to remove your profile photo?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Remove', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setUpdating(true);
+              if (user) {
+                // Update UI instantly
+                setLocalPhotoUrl(null);
+                
+                await user.updateProfile({
+                  photoURL: ''
+                });
+                Alert.alert('Success', 'Profile photo removed successfully.');
+              }
+            } catch (error: any) {
+              Alert.alert('Error', 'Failed to remove photo: ' + error.message);
+            } finally {
+              setUpdating(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   useEffect(() => {
+    setLocalPhotoUrl(user?.photoURL || null);
     fetchProfileData();
+    checkBiometrics();
   }, [user]);
+
+  const checkBiometrics = async () => {
+    const available = await SecurityService.isBiometricAvailable();
+    const enabled = await SecurityService.isBiometricEnabled();
+    setBiometricAvailable(available);
+    setBiometricEnabled(enabled);
+  };
+
+  const toggleBiometrics = async (val: boolean) => {
+    if (val) {
+      const success = await SecurityService.authenticate();
+      if (success) {
+        await SecurityService.setBiometricPreference(true);
+        setBiometricEnabled(true);
+      } else {
+        setBiometricEnabled(false);
+      }
+    } else {
+      await SecurityService.setBiometricPreference(false);
+      setBiometricEnabled(false);
+    }
+  };
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -167,8 +244,8 @@ export default function ProfileScreen({ navigation }: any) {
         </View>
 
         <View style={styles.avatarContainer}>
-          {user?.photoURL ? (
-            <Image source={{ uri: user.photoURL }} style={styles.avatarImg} />
+          {localPhotoUrl ? (
+            <Image source={{ uri: localPhotoUrl }} style={styles.avatarImg} />
           ) : (
             <View style={styles.avatarCircle}>
                <Text style={styles.avatarText}>{getInitials(member?.name || user?.displayName || 'User')}</Text>
@@ -271,6 +348,29 @@ export default function ProfileScreen({ navigation }: any) {
           />
         </View>
 
+        {/* ── Security Section ── */}
+        {biometricAvailable && (
+          <>
+            <Text style={styles.sectionLabel}>SECURITY</Text>
+            <View style={styles.menuGroup}>
+              <View style={[styles.menuItem, { borderBottomWidth: 0 }]}>
+                <View style={[styles.iconBox, { backgroundColor: '#fdf2f2' }]}>
+                  <Lock size={20} color="#c0392b" />
+                </View>
+                <View style={styles.menuContent}>
+                  <Text style={styles.menuTitle}>Biometric Lock</Text>
+                  <Text style={styles.menuSub}>Fingerprint / Face ID</Text>
+                </View>
+                <Switch 
+                  value={biometricEnabled} 
+                  onValueChange={toggleBiometrics}
+                  trackColor={{ false: '#e2e8f0', true: '#1a2d5a' }}
+                />
+              </View>
+            </View>
+          </>
+        )}
+
         {/* ── Support ── */}
         <Text style={styles.sectionLabel}>SUPPORT</Text>
         <View style={styles.menuGroup}>
@@ -301,15 +401,22 @@ export default function ProfileScreen({ navigation }: any) {
             <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScroll}>
               <View style={styles.photoEditSection}>
                 <View style={styles.modalAvatarCircle}>
-                   {user?.photoURL ? (
-                     <Image source={{ uri: user.photoURL }} style={styles.modalAvatarImg} />
+                   {localPhotoUrl ? (
+                     <Image source={{ uri: localPhotoUrl }} style={styles.modalAvatarImg} />
                    ) : (
                      <Text style={styles.modalAvatarText}>{getInitials(member?.name || 'U')}</Text>
                    )}
                 </View>
-                <TouchableOpacity style={styles.changePhotoBtn} onPress={pickImage}>
-                  <Text style={styles.changePhotoText}>Change Profile Photo</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                  <TouchableOpacity style={styles.changePhotoBtn} onPress={pickImage}>
+                    <Text style={styles.changePhotoText}>Change Photo</Text>
+                  </TouchableOpacity>
+                  {localPhotoUrl ? (
+                    <TouchableOpacity style={styles.removePhotoBtn} onPress={handleRemovePhoto}>
+                      <Text style={styles.removePhotoText}>Remove Photo</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               </View>
 
               <View style={styles.inputGroup}>
@@ -494,6 +601,18 @@ export default function ProfileScreen({ navigation }: any) {
                   trackColor={{ false: '#e2e8f0', true: '#1a2d5a' }}
                 />
               </View>
+
+              <View style={styles.notifyItem}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.notifyName}>Prayer Updates</Text>
+                  <Text style={styles.notifyDesc}>Alerts when your prayer is answered (Do Not Disturb)</Text>
+                </View>
+                <Switch 
+                  value={prayerNotify} 
+                  onValueChange={setPrayerNotify}
+                  trackColor={{ false: '#e2e8f0', true: '#1a2d5a' }}
+                />
+              </View>
             </View>
           </View>
         </View>
@@ -619,12 +738,14 @@ const styles = StyleSheet.create({
   closeText: { color: '#ef4444', fontWeight: '700' },
   modalScroll: { flex: 1 },
   
-  photoEditSection: { alignItems: 'center', marginBottom: 30, backgroundColor: '#f8fafc', padding: 20, borderRadius: 20, borderDash: [5, 5], borderWidth: 1, borderColor: '#cbd5e1' },
+  photoEditSection: { alignItems: 'center', marginBottom: 30, backgroundColor: '#f8fafc', padding: 20, borderRadius: 20, borderStyle: 'dashed', borderWidth: 1, borderColor: '#cbd5e1' },
   modalAvatarCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#c0392b', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   modalAvatarImg: { width: 80, height: 80, borderRadius: 40 },
   modalAvatarText: { color: '#fff', fontSize: 28, fontWeight: '800' },
   changePhotoBtn: { backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#1a2d5a' },
   changePhotoText: { color: '#1a2d5a', fontSize: 12, fontWeight: '700' },
+  removePhotoBtn: { backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#ef4444' },
+  removePhotoText: { color: '#ef4444', fontSize: 12, fontWeight: '700' },
 
   inputGroup: { marginBottom: 20 },
   inputRow: { flexDirection: 'row', alignItems: 'center' },

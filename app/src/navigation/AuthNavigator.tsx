@@ -10,7 +10,7 @@ export type AuthStackParamList = {
   Login: undefined;
   SignUp: undefined;
   RegistrationSuccess: undefined;
-  VerifyOtp: { confirmation: any, phoneNumber: string, contactId?: string };
+  VerifyOtp: { confirmation: any, phoneNumber: string, contactId?: string, memberName?: string };
 };
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();

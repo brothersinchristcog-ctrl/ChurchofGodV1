@@ -18,8 +18,9 @@ service cloud.firestore {
     // 1. Users
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow write: if isOwner(userId);
+      allow write: if isAuthenticated() && (isOwner(userId) || !exists(/databases/$(database)/documents/users/$(userId)));
     }
+
 
     // 2. Daily Promises & Videos (Publicly readable by members)
     match /dailyPromises/{promiseId} {
@@ -54,6 +55,21 @@ service cloud.firestore {
     // 6. Giving Transactions (Strict privacy)
     match /givingTransactions/{txId} {
       allow read, write: if isOwner(resource.data.uid);
+    }
+
+    // 7. Broadcasts (Announcements history and Emergency meeting broadcasts)
+    match /broadcasts/{broadcastId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // 8. Settings (Notification settings configuration)
+    match /settings/{settingId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // 9. Worship Songs (Songs lyrics and offline support)
+    match /worshipSongs/{songId} {
+      allow read, write: if isAuthenticated();
     }
   }
 }

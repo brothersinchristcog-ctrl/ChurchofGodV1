@@ -11,7 +11,8 @@ import {
   TextInput,
   ActivityIndicator
 } from 'react-native';
-import { AdminTabContext } from '../../navigation/AdminNavigator';
+import { AdminTabContext } from '../../context/AdminTabContext';
+
 import SalesforceService from '../../services/SalesforceService';
 
 const { width } = Dimensions.get('window');

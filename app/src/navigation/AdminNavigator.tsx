@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Image, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
@@ -12,10 +12,13 @@ import {
   MapPin, 
   Heart,
   LogOut,
-  Menu
+  Menu,
+  Users,
+  Gift
 } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import Theme from '../theme/Theme';
+import { AdminTabContext } from '../context/AdminTabContext';
 
 // Import Screens
 import AdminPromiseList from '../screens/admin/AdminPromiseList';
@@ -28,16 +31,11 @@ import AdminNotificationBroadcast from '../screens/admin/AdminNotificationBroadc
 import AdminEventList from '../screens/admin/AdminEventList';
 import AdminEventEditor from '../screens/admin/AdminEventEditor';
 import AdminPrayerModeration from '../screens/admin/AdminPrayerModeration';
+import AdminSongEditor from '../screens/admin/AdminSongEditor';
+import AdminMembers from '../screens/admin/AdminMembers';
+import AdminCelebrations from '../screens/admin/AdminCelebrations';
 
 const { width } = Dimensions.get('window');
-
-// ─── Tab Context ───
-export const AdminTabContext = createContext({
-  activeTab: 0,
-  setActiveTab: (index: number) => {},
-  editingData: null as any,
-  setEditingData: (data: any) => {}
-});
 
 export default function AdminNavigator() {
   const { signOut, user, member } = useAuth();
@@ -51,11 +49,14 @@ export default function AdminNavigator() {
     { name: 'Schedule', icon: Calendar, component: AdminPromiseCalendar },
     { name: 'Sermons', icon: Mic, component: AdminSermonList },
     { name: 'New Sermon', icon: PlusSquare, component: AdminSermonEditor },
-    { name: 'App Preview', icon: Eye, component: AdminAppPreview },
-    // { name: 'Notifications', icon: Bell, component: AdminNotificationBroadcast },
+    { name: 'New Song', icon: PlusSquare, component: AdminSongEditor },
+    { name: 'Notifications', icon: Bell, component: AdminNotificationBroadcast },
     { name: 'Events', icon: MapPin, component: AdminEventList },
     { name: 'New Event', icon: PlusSquare, component: AdminEventEditor },
     { name: 'Prayers', icon: Heart, component: AdminPrayerModeration },
+    { name: 'Members', icon: Users, component: AdminMembers },
+    { name: 'Celebrations', icon: Gift, component: AdminCelebrations },
+    { name: 'App Preview', icon: Eye, component: AdminAppPreview },
   ];
 
   const ActiveComponent = tabs[activeTab].component;
@@ -123,7 +124,7 @@ export default function AdminNavigator() {
                         onPress={() => {
                           setActiveTab(index);
                           setMenuExpanded(false); // Hide remaining tabs
-                          if ([1, 4, 8].indexOf(index) === -1) setEditingData(null); 
+                          if ([1, 4, 5, 8].indexOf(index) === -1) setEditingData(null); 
                         }}
                       >
                         <tab.icon 

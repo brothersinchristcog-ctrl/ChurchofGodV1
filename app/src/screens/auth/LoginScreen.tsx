@@ -32,6 +32,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   const [loading, setLoading] = useState(false);
   const [verifyingStatus, setVerifyingStatus] = useState('');
   const [memberName, setMemberName] = useState('');
+  const [contactId, setContactId] = useState<string | undefined>(undefined);
   const [isMember, setIsMember] = useState(false);
 
   // ── Auto-lookup member as user types ──
@@ -44,10 +45,12 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
           const result = await SalesforceService.checkContactExists(cleanNum);
           if (result && result.exists) {
             setMemberName(result.member?.firstName || result.member?.name || '');
+            setContactId(result.member?.id);
             setIsMember(true);
             setVerifyingStatus('');
           } else {
             setMemberName('');
+            setContactId(undefined);
             setIsMember(false);
             setVerifyingStatus('Number not found in church records.');
           }
@@ -56,6 +59,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         }
       } else {
         setMemberName('');
+        setContactId(undefined);
         setIsMember(false);
         setVerifyingStatus('');
       }
@@ -81,7 +85,8 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       navigation.navigate('VerifyOtp', { 
         confirmation, 
         phoneNumber: formattedNumber,
-        contactId: undefined 
+        contactId: contactId,
+        memberName: memberName
       });
     } catch (error: any) {
       console.error(error);

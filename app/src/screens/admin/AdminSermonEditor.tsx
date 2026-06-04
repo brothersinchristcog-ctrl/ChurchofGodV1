@@ -39,7 +39,8 @@ import {
   Bell,
   Save
 } from 'lucide-react-native';
-import { AdminTabContext } from '../../navigation/AdminNavigator';
+import { AdminTabContext } from '../../context/AdminTabContext';
+
 import SalesforceService from '../../services/SalesforceService';
 
 const { width } = Dimensions.get('window');
@@ -81,7 +82,8 @@ export default function AdminSermonEditor() {
 
   useEffect(() => {
     if (editingData) {
-      setForm({
+      setForm(prev => ({
+        ...prev,
         titleEn: editingData.title || '',
         titleTe: editingData.titleTelugu || '',
         pastor: editingData.pastor || '',
@@ -91,7 +93,7 @@ export default function AdminSermonEditor() {
         youtubeId: editingData.youtubeId || '',
         description: editingData.description || '',
         status: editingData.status || 'Published'
-      });
+      }));
     }
   }, [editingData]);
 

@@ -53,6 +53,7 @@ export default function AdminPrayerModeration() {
   const [selectedMember, setSelectedMember] = useState<any>(null);
   const [searchingMembers, setSearchingMembers] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const successAnim = React.useRef(new Animated.Value(0)).current;
 
   const triggerSuccess = () => {
@@ -121,7 +122,7 @@ export default function AdminPrayerModeration() {
   const fetchPrayers = useCallback(async (isRefreshing = false) => {
     if (!isRefreshing) setLoading(true);
     try {
-      const data = await SalesforceService.getPrayerRequests();
+      const data = await SalesforceService.getPrayerRequests({ isAdmin: true });
       setPrayers(data);
     } catch (error) {
       console.error('Error fetching admin prayers:', error);
@@ -192,6 +193,7 @@ export default function AdminPrayerModeration() {
       setPastorRequest({ ...pastorRequest, en: '', te: '' });
       setSelectedMember(null);
       setMemberSearchQuery('');
+      setShowCreateModal(false);
       triggerSuccess();
       fetchPrayers(true);
     } catch (err) {
@@ -242,7 +244,7 @@ export default function AdminPrayerModeration() {
 
       <View style={styles.pTextContainer}>
         <Text style={styles.pText}>{item.text}</Text>
-        {item.textTe && (
+        {item.textTe && item.textTe.trim() !== (item.text || '').trim() && (
           <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 0.5, borderTopColor: '#e2e8f0' }}>
             <Text style={[styles.pText, { fontStyle: 'italic', color: '#475569' }]}>
               {item.textTe}
@@ -250,6 +252,22 @@ export default function AdminPrayerModeration() {
           </View>
         )}
       </View>
+
+      {/* REPLIES / COMMENTS SECTION */}
+      {item.replies && item.replies.length > 0 && (
+        <View style={styles.repliesContainer}>
+          <Text style={styles.repliesHeader}>Comments</Text>
+          {item.replies.map((reply: any) => (
+            <View key={reply.id} style={styles.replyCard}>
+              <View style={styles.replyHeader}>
+                <Text style={styles.replyAuthor}>{reply.author}</Text>
+                <Text style={styles.replyDate}>{new Date(reply.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</Text>
+              </View>
+              <Text style={styles.replyBody}>{reply.body}</Text>
+            </View>
+          ))}
+        </View>
+      )}
 
       <View style={styles.pFooter}>
         <View style={styles.catBadge}>
@@ -291,11 +309,18 @@ export default function AdminPrayerModeration() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         {/* ── Section Heading ── */}
-        <View style={styles.secHd}>
+        <View style={[styles.secHd, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
           <View>
             <Text style={styles.secTitle}>🙏 Prayer Moderation</Text>
             <Text style={styles.secSub}>Real-time requests from Salesforce</Text>
           </View>
+          <TouchableOpacity 
+            style={styles.headerCreateBtn}
+            onPress={() => setShowCreateModal(true)}
+          >
+            <Plus size={14} color="#fff" />
+            <Text style={styles.headerCreateBtnTxt}>Create</Text>
+          </TouchableOpacity>
         </View>
 
         {/* ── Stats Row ── */}
@@ -330,166 +355,176 @@ export default function AdminPrayerModeration() {
           </>
         )}
 
-        {/* ── Add Pastoral Request ── */}
-        <View style={styles.pastorSection}>
-          <Text style={styles.pastorSecTitle}>Create New Prayer Request</Text>
+      </ScrollView>
 
-          {/* Member Lookup */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Church Member</Text>
-            <View style={styles.searchBox}>
-              <TextInput
-                placeholder="Search by name or phone..."
-                style={styles.searchInput}
-                value={memberSearchQuery}
-                onChangeText={handleMemberSearch}
-              />
-              {searchingMembers && <ActivityIndicator size="small" color={Theme.Colors.primary} />}
+      {/* ── Create Prayer Request Modal ── */}
+      <Modal visible={showCreateModal} animationType="slide" transparent>
+        <View style={styles.createModalOverlay}>
+          <View style={styles.createModalContent}>
+            <View style={styles.createModalHeader}>
+              <Text style={styles.createModalTitle}>Create New Prayer Request</Text>
+              <TouchableOpacity onPress={() => setShowCreateModal(false)} style={styles.closeBtn}>
+                <XCircle size={24} color="#64748b" />
+              </TouchableOpacity>
             </View>
-
-            {memberSearchResults.length > 0 && !selectedMember && (
-              <View style={styles.searchResults}>
-                {memberSearchResults.map(m => (
-                  <TouchableOpacity
-                    key={m.id}
-                    style={styles.searchItem}
-                    onPress={() => {
-                      setSelectedMember(m);
-                      setMemberSearchResults([]);
-                      setMemberSearchQuery(m.name);
-                    }}
-                  >
-                    <View>
-                      <Text style={styles.searchItemName}>{m.name}</Text>
-                      <Text style={styles.searchItemPhone}>{m.phone || 'No Phone'}</Text>
-                    </View>
-                    <Plus size={14} color={Theme.Colors.primary} />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {selectedMember && (
-              <View style={styles.selectedBadge}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <User size={14} color="#fff" />
-                  <Text style={styles.selectedBadgeTxt}>{selectedMember.name}</Text>
+            
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20 }}>
+              {/* Member Lookup */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Church Member</Text>
+                <View style={styles.searchBox}>
+                  <TextInput
+                    placeholder="Search by name or phone..."
+                    style={styles.searchInput}
+                    value={memberSearchQuery}
+                    onChangeText={handleMemberSearch}
+                  />
+                  {searchingMembers && <ActivityIndicator size="small" color={Theme.Colors.primary} />}
                 </View>
-                <TouchableOpacity onPress={() => setSelectedMember(null)}>
-                  <XCircle size={16} color="#fff" />
+
+                {memberSearchResults.length > 0 && !selectedMember && (
+                  <View style={styles.searchResults}>
+                    {memberSearchResults.map(m => (
+                      <TouchableOpacity
+                        key={m.id}
+                        style={styles.searchItem}
+                        onPress={() => {
+                          setSelectedMember(m);
+                          setMemberSearchResults([]);
+                          setMemberSearchQuery(m.name);
+                        }}
+                      >
+                        <View>
+                          <Text style={styles.searchItemName}>{m.name}</Text>
+                          <Text style={styles.searchItemPhone}>{m.phone || 'No Phone'}</Text>
+                        </View>
+                        <Plus size={14} color={Theme.Colors.primary} />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
+                {selectedMember && (
+                  <View style={styles.selectedBadge}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <User size={14} color="#fff" />
+                      <Text style={styles.selectedBadgeTxt}>{selectedMember.name}</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => setSelectedMember(null)}>
+                      <XCircle size={16} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Prayer Category</Text>
+                <TouchableOpacity
+                  style={styles.pickerBtn}
+                  onPress={() => setShowPicker(!showPicker)}
+                >
+                  <Text style={styles.pickerTxt}>
+                    {pastorRequest.category || 'Select Category'}
+                  </Text>
+                  <MoreVertical size={14} color="#64748b" />
                 </TouchableOpacity>
+
+                {showPicker && (
+                  <View style={styles.categoryList}>
+                    {prayerCategories.map(cat => (
+                      <TouchableOpacity
+                        key={cat}
+                        style={[styles.catOption, pastorRequest.category === cat && styles.catOptionActive]}
+                        onPress={() => {
+                          setPastorRequest({ ...pastorRequest, category: cat });
+                          setShowPicker(false);
+                        }}
+                      >
+                        <Text style={[styles.catOptionTxt, pastorRequest.category === cat && { color: '#fff' }]}>
+                          {cat}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
               </View>
-            )}
-          </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Prayer Category</Text>
-            <TouchableOpacity
-              style={styles.pickerBtn}
-              onPress={() => setShowPicker(!showPicker)}
-            >
-              <Text style={styles.pickerTxt}>
-                {pastorRequest.category || 'Select Category'}
-              </Text>
-              <MoreVertical size={14} color="#64748b" />
-            </TouchableOpacity>
-
-            {showPicker && (
-              <View style={styles.categoryList}>
-                {prayerCategories.map(cat => (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[styles.catOption, pastorRequest.category === cat && styles.catOptionActive]}
-                    onPress={() => {
-                      setPastorRequest({ ...pastorRequest, category: cat });
-                      setShowPicker(false);
-                    }}
-                  >
-                    <Text style={[styles.catOptionTxt, pastorRequest.category === cat && { color: '#fff' }]}>
-                      {cat}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Prayer request text — English</Text>
+                <View style={styles.textArea}>
+                  <TextInput
+                    placeholder="Type the prayer request details..."
+                    multiline
+                    numberOfLines={4}
+                    style={styles.textInput}
+                    value={pastorRequest.en}
+                    onChangeText={t => setPastorRequest({ ...pastorRequest, en: t })}
+                  />
+                </View>
               </View>
-            )}
-          </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Prayer request text — English</Text>
-            <View style={styles.textArea}>
-              <TextInput
-                placeholder="Type the prayer request details..."
-                multiline
-                numberOfLines={4}
-                style={styles.textInput}
-                value={pastorRequest.en}
-                onChangeText={t => setPastorRequest({ ...pastorRequest, en: t })}
-              />
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Detailed Prayer Request</Text>
-            <View style={styles.textArea}>
-              <TextInput
-                placeholder="తెలుగులో ప్రార్థన విజ్ఞాపన..."
-                multiline
-                numberOfLines={4}
-                style={[styles.textInput, { fontStyle: 'italic' }]}
-                value={pastorRequest.te}
-                onChangeText={t => setPastorRequest({ ...pastorRequest, te: t })}
-              />
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Post as</Text>
-            <TouchableOpacity
-              style={styles.pickerBtn}
-              onPress={() => setShowPostAs(!showPostAs)}
-            >
-              <Text style={styles.pickerTxt}>{pastorRequest.postAs}</Text>
-              <MoreVertical size={14} color="#64748b" />
-            </TouchableOpacity>
-
-            {showPostAs && (
-              <View style={styles.categoryList}>
-                {postAsOptions.map(opt => (
-                  <TouchableOpacity
-                    key={opt}
-                    style={[styles.catOption, pastorRequest.postAs === opt && styles.catOptionActive]}
-                    onPress={() => {
-                      setPastorRequest({ ...pastorRequest, postAs: opt });
-                      setShowPostAs(false);
-                    }}
-                  >
-                    <Text style={[styles.catOptionTxt, pastorRequest.postAs === opt && { color: '#fff' }]}>
-                      {opt}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Detailed Prayer Request</Text>
+                <View style={styles.textArea}>
+                  <TextInput
+                    placeholder="తెలుగులో ప్రార్థన విజ్ఞాపన..."
+                    multiline
+                    numberOfLines={4}
+                    style={[styles.textInput, { fontStyle: 'italic' }]}
+                    value={pastorRequest.te}
+                    onChangeText={t => setPastorRequest({ ...pastorRequest, te: t })}
+                  />
+                </View>
               </View>
-            )}
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Post as</Text>
+                <TouchableOpacity
+                  style={styles.pickerBtn}
+                  onPress={() => setShowPostAs(!showPostAs)}
+                >
+                  <Text style={styles.pickerTxt}>{pastorRequest.postAs}</Text>
+                  <MoreVertical size={14} color="#64748b" />
+                </TouchableOpacity>
+
+                {showPostAs && (
+                  <View style={styles.categoryList}>
+                    {postAsOptions.map(opt => (
+                      <TouchableOpacity
+                        key={opt}
+                        style={[styles.catOption, pastorRequest.postAs === opt && styles.catOptionActive]}
+                        onPress={() => {
+                          setPastorRequest({ ...pastorRequest, postAs: opt });
+                          setShowPostAs(false);
+                        }}
+                      >
+                        <Text style={[styles.catOptionTxt, pastorRequest.postAs === opt && { color: '#fff' }]}>
+                          {opt}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              <TouchableOpacity
+                style={[styles.publishBtn, submitting && { opacity: 0.7 }, { marginTop: 10, marginBottom: 40 }]}
+                onPress={handlePublish}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Megaphone size={16} color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={styles.publishBtnTxt}>Submit Prayer Request</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
-
-        <TouchableOpacity
-          style={[styles.publishBtn, submitting && { opacity: 0.7 }]}
-          onPress={handlePublish}
-          disabled={submitting}
-        >
-          {submitting ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <Megaphone size={16} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.publishBtnTxt}>Submit Prayer Request</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        <View style={{ height: 150 }} />
-      </ScrollView>
+      </Modal>
 
       {/* ── Success Modal ── */}
       <Modal visible={showSuccessModal} transparent animationType="fade">
@@ -529,7 +564,7 @@ const styles = StyleSheet.create({
   scroll: { padding: 14 },
 
   secHd: { marginBottom: 0, paddingBottom: 15, borderBottomWidth: 1.5, borderBottomColor: Theme.Colors.accent },
-  secTitle: { fontSize: 18, fontWeight: '800', color: Theme.Colors.navy },
+  secTitle: { fontSize: 18, fontWeight: '800', color: Theme.Colors.primary },
   secSub: { fontSize: 11, color: '#6B7280', marginTop: 4 },
 
   statsRow: { flexDirection: 'row', gap: 12, marginBottom: 18, marginTop: 15 },
@@ -564,7 +599,7 @@ const styles = StyleSheet.create({
   pActionBtnTxt: { fontSize: 10, fontWeight: '700', color: Theme.Colors.primary },
 
   pastorSection: { backgroundColor: '#fff', borderRadius: 16, padding: 20, marginTop: 20, borderWidth: 0.5, borderColor: '#e2e8f0' },
-  pastorSecTitle: { fontSize: 14, fontWeight: '700', color: Theme.Colors.navy, marginBottom: 20 },
+  pastorSecTitle: { fontSize: 14, fontWeight: '700', color: Theme.Colors.primary, marginBottom: 20 },
   inputGroup: { marginBottom: 15 },
   inputLabel: { fontSize: 11, fontWeight: '700', color: '#1e293b', marginBottom: 8 },
   textArea: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, minHeight: 80, paddingHorizontal: 12, marginBottom: 10 },
@@ -618,13 +653,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: Theme.Colors.navy,
+    backgroundColor: Theme.Colors.primary,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 8,
     marginTop: 8
   },
   selectedBadgeTxt: { color: '#fff', fontSize: 12, fontWeight: '700' },
+
+  headerCreateBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: Theme.Colors.primary, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, gap: 6 },
+  headerCreateBtnTxt: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  createModalOverlay: { flex: 1, backgroundColor: 'rgba(15, 30, 58, 0.7)', justifyContent: 'flex-end' },
+  createModalContent: { backgroundColor: '#f0f2f7', borderTopLeftRadius: 24, borderTopRightRadius: 24, height: '85%' },
+  createModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  createModalTitle: { fontSize: 16, fontWeight: '800', color: Theme.Colors.primary },
+  closeBtn: { padding: 4 },
 
   // Success Modal Styles
   modalOverlay: {
@@ -686,5 +729,14 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '700'
-  }
+  },
+  
+  // Replies Styles
+  repliesContainer: { marginTop: 15, paddingTop: 15, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  repliesHeader: { fontSize: 12, fontWeight: '800', color: '#1a2d5a', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
+  replyCard: { backgroundColor: '#f8fafc', borderRadius: 10, padding: 12, marginBottom: 8 },
+  replyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  replyAuthor: { fontSize: 12, fontWeight: '700', color: '#1a2d5a' },
+  replyDate: { fontSize: 11, color: '#94a3b8', fontWeight: '500' },
+  replyBody: { fontSize: 13, color: '#475569', lineHeight: 20 }
 });

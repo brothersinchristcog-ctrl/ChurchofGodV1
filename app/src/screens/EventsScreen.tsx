@@ -31,6 +31,7 @@ export default function EventsScreen({ navigation }: any) {
   const [pastEvents, setPastEvents] = useState<ScheduleEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'thisWeek' | 'upcoming' | 'past'>('upcoming');
 
   const fetchEvents = async () => {
     try {
@@ -38,6 +39,8 @@ export default function EventsScreen({ navigation }: any) {
         SalesforceService.getUpcomingEvents(15),
         SalesforceService.getPastEvents(5)
       ]);
+      console.log('📅 Mapped Upcoming Events:', JSON.stringify(upcoming, null, 2));
+      console.log('📅 Mapped Past Events:', JSON.stringify(past, null, 2));
       setUpcomingEvents(upcoming);
       setPastEvents(past);
     } catch (error) {
@@ -82,6 +85,28 @@ export default function EventsScreen({ navigation }: any) {
     }
   };
 
+  const getRelativeDayLabel = (dateStr: string) => {
+    if (!dateStr) return null;
+    const eventDate = new Date(dateStr);
+    eventDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffTime = eventDate.getTime() - today.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Tomorrow';
+    if (diffDays === -1) return 'Yesterday';
+    return null;
+  };
+
+  const getRelativeDayColor = (label: string | null) => {
+    if (label === 'Today') return '#e11d48'; // Red
+    if (label === 'Tomorrow') return '#0284c7'; // Blue
+    if (label === 'Yesterday') return '#94a3b8'; // Slate
+    return '#64748b';
+  };
+
   const renderEvent = (item: ScheduleEvent, isPast: boolean = false) => {
     return (
       <TouchableOpacity 
@@ -98,10 +123,22 @@ export default function EventsScreen({ navigation }: any) {
         <View style={styles.ebBody}>
           <View style={styles.ebThumbnailContainer}>
             <Image 
-              source={{ uri: item.image || 'https://images.unsplash.com/photo-1438232992991-995b7058bbb3?q=80&w=400' }}
+              source={{ uri: item.image || item.bannerUrl || 'https://images.unsplash.com/photo-1438232992991-995b7058bbb3?q=80&w=400' }}
               style={styles.ebThumbnail}
-              resizeMode="contain"
+              resizeMode="cover"
             />
+            {getRelativeDayLabel(item.date) && (
+              <Text style={{ 
+                fontSize: 10, 
+                fontWeight: '800', 
+                color: getRelativeDayColor(getRelativeDayLabel(item.date)), 
+                marginTop: 8,
+                textTransform: 'uppercase',
+                letterSpacing: 0.5
+              }}>
+                {getRelativeDayLabel(item.date)}
+              </Text>
+            )}
           </View>
           <View style={styles.ebInfo}>
             <Text style={styles.ebTitle} numberOfLines={2}>
@@ -163,23 +200,41 @@ export default function EventsScreen({ navigation }: any) {
         <View style={{ width: 60 }} />
       </View>
 
+      {/* Tabs */}
+      <View style={styles.tabContainer}>
+        {(['thisWeek', 'upcoming', 'past'] as const).map(tab => {
+          const isActive = activeTab === tab;
+          let label = tab === 'thisWeek' ? 'This Week' : tab === 'upcoming' ? 'Upcoming' : 'Past';
+          return (
+            <TouchableOpacity 
+              key={tab} 
+              style={[styles.tabBtn, isActive && styles.tabBtnActive]}
+              onPress={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.tabTxt, isActive && styles.tabTxtActive]}>{label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       <FlatList
-        data={['upcoming-header', ...upcomingEvents, 'past-header', ...pastEvents]}
-        keyExtractor={(item, index) => typeof item === 'string' ? item : item.id + index}
-        renderItem={({ item }) => {
-          if (item === 'upcoming-header') {
-            return upcomingEvents.length > 0 ? (
-              <Text style={styles.sectionLabel}>UPCOMING · రాబోయే కార్యక్రమాలు</Text>
-            ) : null;
-          }
-          if (item === 'past-header') {
-            return pastEvents.length > 0 ? (
-              <Text style={[styles.sectionLabel, { marginTop: 30 }]}>PAST EVENTS · ముగిసిన కార్యక్రమాలు</Text>
-            ) : null;
-          }
-          const isPast = pastEvents.some(p => p.id === (item as ScheduleEvent).id);
-          return renderEvent(item as ScheduleEvent, isPast);
-        }}
+        data={
+          activeTab === 'thisWeek' 
+            ? upcomingEvents.filter(e => {
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                const endOfWeek = new Date(today);
+                endOfWeek.setDate(today.getDate() + (7 - today.getDay()));
+                endOfWeek.setHours(23,59,59,999);
+                const d = new Date(e.date);
+                return d >= today && d <= endOfWeek;
+              })
+            : activeTab === 'upcoming' 
+              ? upcomingEvents 
+              : pastEvents
+        }
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => renderEvent(item, activeTab === 'past')}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -222,17 +277,38 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
   headerSub: { color: '#aac4e8', fontSize: 11, marginTop: 2 },
 
-  listContainer: { paddingBottom: 40, paddingTop: 10 },
-  sectionLabel: { 
-    fontSize: 13, 
-    fontWeight: '800', 
-    color: '#64748b', 
-    letterSpacing: 0.5, 
-    marginHorizontal: 20, 
-    marginTop: 20, 
-    marginBottom: 10,
-    textTransform: 'uppercase'
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    gap: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    marginBottom: 5,
   },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+  },
+  tabBtnActive: {
+    backgroundColor: '#1a2d5a',
+  },
+  tabTxt: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  tabTxtActive: {
+    color: '#FCD34D',
+  },
+
+  listContainer: { paddingBottom: 40, paddingTop: 10 },
 
   // Event Card
   // Event Card (Sermon Style)
@@ -240,8 +316,8 @@ const styles = StyleSheet.create({
   ebHd: { backgroundColor: '#1a2d5a', paddingVertical: 10, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   ebHdLbl: { fontSize: 12, color: '#fff', fontWeight: '700' },
   ebBody: { flexDirection: 'row', backgroundColor: '#fff', alignItems: 'flex-start', paddingVertical: 15 },
-  ebThumbnailContainer: { width: 85, height: 85, backgroundColor: 'transparent', justifyContent: 'center', alignItems: 'center', marginLeft: 15 },
-  ebThumbnail: { width: '100%', height: '100%', borderRadius: 8 },
+  ebThumbnailContainer: { width: 100, height: 56, backgroundColor: 'transparent', justifyContent: 'center', alignItems: 'center', marginLeft: 15 },
+  ebThumbnail: { width: 100, height: 56, borderRadius: 8 },
   ebInfo: { flex: 1, paddingHorizontal: 15 },
   ebTitle: { fontSize: 13.5, fontWeight: '800', color: '#1a2d5a', marginBottom: 5 },
   ebDetailsLink: { fontSize: 10, fontWeight: '800', color: '#1a2d5a', marginTop: 8 },

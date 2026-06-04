@@ -47,6 +47,8 @@ export default function SignUpScreen({ navigation }: any) {
     email: '',
     gender: 'Male',
     maritalStatus: 'Single',
+    anniversaryDate: '',
+    numberOfChildren: '',
     baptized: 'No',
     baptismDate: '',
     baptismChurch: '',
@@ -87,6 +89,11 @@ export default function SignUpScreen({ navigation }: any) {
 
     if (formData.baptized === 'Yes' && (!formData.baptismDate || !formData.baptismChurch)) {
       Alert.alert('Baptism Details', 'Please provide the Date and Church of your baptism.');
+      return;
+    }
+
+    if (formData.maritalStatus !== 'Single' && (!formData.anniversaryDate || !formData.numberOfChildren)) {
+      Alert.alert('Marital Details', 'Please provide your Anniversary Date and Number of Children.');
       return;
     }
 
@@ -164,9 +171,9 @@ export default function SignUpScreen({ navigation }: any) {
             <Text style={styles.secLbl}>PERSONAL INFORMATION</Text>
           </View>
           <View style={styles.formCard}>
-            <InputRow label="First Name" value={formData.firstName} onChange={(v) => handleInputChange('firstName', v)} placeholder="John" />
-            <InputRow label="Last Name" value={formData.lastName} onChange={(v) => handleInputChange('lastName', v)} placeholder="Doe" />
-            <InputRow label="Email Address" value={formData.email} onChange={(v) => handleInputChange('email', v)} placeholder="john.doe@example.com" keyboardType="email-address" />
+            <InputRow label="First Name" value={formData.firstName} onChange={(v: string) => handleInputChange('firstName', v)} placeholder="John" />
+            <InputRow label="Last Name" value={formData.lastName} onChange={(v: string) => handleInputChange('lastName', v)} placeholder="Doe" />
+            <InputRow label="Email Address" value={formData.email} onChange={(v: string) => handleInputChange('email', v)} placeholder="john.doe@example.com" keyboardType="email-address" />
             <TouchableOpacity onPress={() => showDatePicker('dob')}>
               <View pointerEvents="none">
                 <InputRow label="Date of Birth" value={formData.dob} placeholder="Select Date" />
@@ -184,14 +191,31 @@ export default function SignUpScreen({ navigation }: any) {
 
             <Text style={styles.innerLbl}>MARITAL STATUS</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillRow}>
-              {['Single', 'Married', 'Widow', 'Divorced'].map(m => (
+              {['Single', 'Married', 'Widowed', 'Divorced'].map(m => (
                 <TouchableOpacity key={m} style={[styles.pill, formData.maritalStatus === m && styles.pillActive, { marginRight: 8 }]} onPress={() => handleInputChange('maritalStatus', m)}>
                   <Text style={[styles.pillTxt, formData.maritalStatus === m && styles.pillTxtActive]}>{m}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
 
-            <InputRow label="Nationality" value={formData.nationality} onChange={(v) => handleInputChange('nationality', v)} placeholder="Indian" />
+            {formData.maritalStatus !== 'Single' && (
+              <View style={[styles.nestedFields, { borderLeftColor: '#1a2d5a' }]}>
+                <TouchableOpacity onPress={() => showDatePicker('anniversaryDate')}>
+                  <View pointerEvents="none">
+                    <InputRow label="Anniversary Date" value={formData.anniversaryDate} placeholder="Select Date" />
+                  </View>
+                </TouchableOpacity>
+                <InputRow 
+                  label="Number of Children" 
+                  value={formData.numberOfChildren} 
+                  onChange={(v: string) => handleInputChange('numberOfChildren', v)} 
+                  placeholder="0" 
+                  keyboardType="numeric" 
+                />
+              </View>
+            )}
+
+            <InputRow label="Nationality" value={formData.nationality} onChange={(v: string) => handleInputChange('nationality', v)} placeholder="Indian" />
           </View>
 
           {/* ── Section 2: Spiritual ── */}
@@ -216,10 +240,10 @@ export default function SignUpScreen({ navigation }: any) {
                     <InputRow label="Baptism Date" value={formData.baptismDate} placeholder="Select Date" />
                   </View>
                 </TouchableOpacity>
-                <InputRow label="Baptism Church" value={formData.baptismChurch} onChange={(v) => handleInputChange('baptismChurch', v)} placeholder="Church Name" />
+                <InputRow label="Baptism Church" value={formData.baptismChurch} onChange={(v: string) => handleInputChange('baptismChurch', v)} placeholder="Church Name" />
               </View>
             )}
-            <InputRow label="Current Church Name" value={formData.churchName} onChange={(v) => handleInputChange('churchName', v)} placeholder="COG Branch Name" />
+            <InputRow label="Current Church Name" value={formData.churchName} onChange={(v: string) => handleInputChange('churchName', v)} placeholder="COG Branch Name" />
           </View>
 
           {/* ── Section 3: Contact ── */}
@@ -228,32 +252,32 @@ export default function SignUpScreen({ navigation }: any) {
             <Text style={[styles.secLbl, { color: '#c0392b' }]}>CONTACT & LOCATION</Text>
           </View>
           <View style={styles.formCard}>
-            <InputRow label="Phone Number" value={formData.phone} onChange={(v) => handleInputChange('phone', v)} placeholder="9988776655" keyboardType="phone-pad" />
+            <InputRow label="Phone Number" value={formData.phone} onChange={(v: string) => handleInputChange('phone', v)} placeholder="9988776655" keyboardType="phone-pad" />
 
             <View style={styles.grid}>
               <View style={{ flex: 1 }}>
-                <InputRow label="Street / Door No" value={formData.street} onChange={(v) => handleInputChange('street', v)} placeholder="1-23/A" />
+                <InputRow label="Street / Door No" value={formData.street} onChange={(v: string) => handleInputChange('street', v)} placeholder="1-23/A" />
               </View>
               <View style={{ flex: 1 }}>
-                <InputRow label="Mandal" value={formData.mandal} onChange={(v) => handleInputChange('mandal', v)} placeholder="Mandal" />
+                <InputRow label="Mandal" value={formData.mandal} onChange={(v: string) => handleInputChange('mandal', v)} placeholder="Mandal" />
               </View>
             </View>
 
             <View style={styles.grid}>
               <View style={{ flex: 1 }}>
-                <InputRow label="City / Village" value={formData.city} onChange={(v) => handleInputChange('city', v)} placeholder="City" />
+                <InputRow label="City / Village" value={formData.city} onChange={(v: string) => handleInputChange('city', v)} placeholder="City" />
               </View>
               <View style={{ flex: 1 }}>
-                <InputRow label="District" value={formData.district} onChange={(v) => handleInputChange('district', v)} placeholder="District" />
+                <InputRow label="District" value={formData.district} onChange={(v: string) => handleInputChange('district', v)} placeholder="District" />
               </View>
             </View>
 
             <View style={styles.grid}>
               <View style={{ flex: 1 }}>
-                <InputRow label="State" value={formData.state} onChange={(v) => handleInputChange('state', v)} placeholder="State" />
+                <InputRow label="State" value={formData.state} onChange={(v: string) => handleInputChange('state', v)} placeholder="State" />
               </View>
               <View style={{ flex: 1 }}>
-                <InputRow label="Pincode" value={formData.zip} onChange={(v) => handleInputChange('zip', v)} placeholder="500001" keyboardType="numeric" />
+                <InputRow label="Pincode" value={formData.zip} onChange={(v: string) => handleInputChange('zip', v)} placeholder="500001" keyboardType="numeric" />
               </View>
             </View>
           </View>

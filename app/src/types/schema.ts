@@ -51,18 +51,22 @@ export interface ChurchEvent {
 
 export interface PrayerRequest {
   id: string;
-  uid: string;
+  uid?: string;
   name: string;
+  phone?: string;
   text: string;
-  type: 'public' | 'private';
-  category: 'Health' | 'Guidance' | 'Family' | 'Finance' | 'Thanksgiving' | 'Other';
-  status: 'pending' | 'approved';
+  textTe?: string;
+  type?: 'public' | 'private';
+  category: string;
+  status?: 'pending' | 'approved';
   prayCount: number;
-  prayedBy: string[]; // List of UIDs
+  prayedBy?: string[]; // List of UIDs
   response?: string; // Pastor's response
   isAnswered: boolean;
+  isAnonymous?: boolean;
   testimony?: string;
   createdAt: any;
+  replies?: any[];
 }
 
 export interface Announcement {

@@ -11,7 +11,8 @@ import {
   Dimensions
 } from 'react-native';
 import { BookOpen, Languages, Play, AlertCircle, Plus } from 'lucide-react-native';
-import { AdminTabContext } from '../../navigation/AdminNavigator';
+import { AdminTabContext } from '../../context/AdminTabContext';
+
 import SalesforceService, { DailyPromise } from '../../services/SalesforceService';
 
 const { width } = Dimensions.get('window');

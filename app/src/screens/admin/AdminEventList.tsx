@@ -11,7 +11,8 @@ import {
   Image
 } from 'react-native';
 import { MapPin, Clock, Calendar } from 'lucide-react-native';
-import { AdminTabContext } from '../../navigation/AdminNavigator';
+import { AdminTabContext } from '../../context/AdminTabContext';
+
 import SalesforceService from '../../services/SalesforceService';
 
 const { width } = Dimensions.get('window');

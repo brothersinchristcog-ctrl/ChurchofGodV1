@@ -62,8 +62,8 @@ export default function SermonsScreen({ navigation }: any) {
     id: 'placeholder',
     title: 'Walking in Faith Through Every Trial',
     titleTelugu: 'విశ్వాసంతో నడవడం',
-    pastor: 'Pastor Daniel Raju',
-    date: 'Apr 13, 2026',
+    pastor: 'Brother Y. Rajesh',
+    date: 'Apr 13',
     scripture: 'James 1:2-4',
     duration: '42 min',
     viewCount: 1240,
@@ -89,7 +89,7 @@ export default function SermonsScreen({ navigation }: any) {
           {item.title} {item.titleTelugu ? `|| ${item.titleTelugu}` : ''}
         </Text>
         <Text style={styles.scMeta}>
-          {item.pastor || 'Elder Samuel Reddy'} · {item.date || 'Apr 6'} · {item.duration || '35 min'} · {item.viewCount || 890} views
+          {item.pastor || 'Brother Y. Rajesh'} · {item.date || 'N/A'} {item.duration && item.duration !== 'N/A' ? ` · ${item.duration}` : ''}
         </Text>
         <View style={styles.scTags}>
           <View style={[styles.tag, { backgroundColor: '#f5f3ff' }]}>
@@ -172,7 +172,7 @@ export default function SermonsScreen({ navigation }: any) {
               </Text>
               
               <Text style={styles.heroMeta}>
-                {latestSermon.pastor} · {latestSermon.date} · {latestSermon.scripture || ''} · {latestSermon.duration} · {latestSermon.viewCount} views
+                {latestSermon.pastor} · {latestSermon.date} {latestSermon.scripture ? ` · ${latestSermon.scripture}` : ''} {latestSermon.duration && latestSermon.duration !== 'N/A' ? ` · ${latestSermon.duration}` : ''}
               </Text>
 
               <View style={styles.heroActions}>

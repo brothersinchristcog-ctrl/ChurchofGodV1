@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   Calendar,
@@ -32,7 +33,8 @@ import {
   CheckCircle2,
   ArrowLeft
 } from 'lucide-react-native';
-import { AdminTabContext } from '../../navigation/AdminNavigator';
+import { AdminTabContext } from '../../context/AdminTabContext';
+
 import SalesforceService from '../../services/SalesforceService';
 
 const { width, height } = Dimensions.get('window');
@@ -198,6 +200,28 @@ export default function AdminEventEditor() {
     setDatePickerVisibility(false);
   };
 
+  const uploadImageToCloud = async (localUri: string): Promise<string> => {
+    const filename = localUri.split('/').pop() || `img_${Date.now()}.jpg`;
+    
+    // Read local file as Base64 string
+    const base64Data = await FileSystem.readAsStringAsync(localUri, {
+      encoding: 'base64',
+    });
+
+    const { functions } = require('../../services/firebaseConfig');
+    const uploadFunc = functions().httpsCallable('uploadEventImage');
+    
+    const response = await uploadFunc({
+      image: base64Data,
+      fileName: filename
+    });
+
+    if (response.data?.success && response.data?.url) {
+      return response.data.url;
+    }
+    throw new Error('Cloud upload failed');
+  };
+
   const confirmJSTime = (target: 'start' | 'end') => {
     const formatted = `${tempTime.h}:${tempTime.m} ${tempTime.p}`;
     if (target === 'start') setStartTime(formatted);
@@ -205,18 +229,29 @@ export default function AdminEventEditor() {
     setStartTimeVisibility(false);
     setEndTimeVisibility(false);
   };
-
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: 'images',
         allowsEditing: true,
         aspect: [16, 9],
         quality: 0.8,
       });
 
       if (!result.canceled) {
-        setBannerUrl(result.assets[0].uri);
+        const localUri = result.assets[0].uri;
+        setLoading(true);
+        try {
+          const cloudUrl = await uploadImageToCloud(localUri);
+          setBannerUrl(cloudUrl);
+          Alert.alert('Success · విజయం', 'Banner uploaded to cloud successfully! all members will be able to see it.');
+        } catch (err) {
+          console.error('Cloud upload error:', err);
+          setBannerUrl(localUri);
+          Alert.alert('Upload Failed · అప్‌లోడ్ విఫలమైంది', 'Failed to upload banner to the cloud. You can still save it or manually paste a public web link in the text box.');
+        } finally {
+          setLoading(false);
+        }
       }
     } catch (err) {
       Alert.alert('Picker Error', 'Native module not ready yet. Please use the URL field for now.');
@@ -498,14 +533,14 @@ export default function AdminEventEditor() {
           <Text style={styles.label}>Event type</Text>
           <TouchableOpacity style={styles.dropdown} onPress={() => setShowTypeDropdown(!showTypeDropdown)}>
             <Text style={styles.dropdownTxt}>
-              {EVENT_TYPES.find(t => t.value === eventType)?.label || eventType}
+              {EVENT_TYPES.find((t: any) => t.value === eventType)?.label || eventType}
             </Text>
             <ChevronDown size={16} color="#64748b" />
           </TouchableOpacity>
           {showTypeDropdown && (
             <View style={styles.dropdownMenu}>
               {/* Prioritize metadata-verified types discovered from Salesforce */}
-              {(metadata?.types || EVENT_TYPES).map(t => (
+              {(metadata?.types || EVENT_TYPES).map((t: any) => (
                 <TouchableOpacity
                   key={`${t.value}-${t.label}`}
                   style={[styles.dropdownItem, eventType === t.value && styles.dropdownItemActive]}
@@ -833,7 +868,7 @@ export default function AdminEventEditor() {
             <View style={styles.cardOverlay}>
               <View style={styles.cardTypeRow}>
                 <Text style={styles.cardType}>● {(metadata?.types || EVENT_TYPES).find((t: any) => t.value === eventType)?.label.split(' · ')[0] || eventType}</Text>
-                <View style={styles.cardMode}><Text style={styles.cardModeTxt}>{mode}</Text></View>
+                <View ><Text >{mode}</Text></View>
               </View>
               <Text style={styles.cardTitle}>{titleEn || 'Event title...'}</Text>
               <Text style={styles.cardTitleTe}>{titleTe || 'తెలుగు పేరు...'}</Text>

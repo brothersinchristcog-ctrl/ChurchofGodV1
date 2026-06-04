@@ -21,7 +21,8 @@ import {
   Clock,
   Edit2
 } from 'lucide-react-native';
-import { AdminTabContext } from '../../navigation/AdminNavigator';
+import { AdminTabContext } from '../../context/AdminTabContext';
+
 import SalesforceService, { Sermon } from '../../services/SalesforceService';
 import { Linking } from 'react-native';
 
@@ -71,10 +72,10 @@ export default function AdminSermonList() {
   const stats = {
     published: sermons.filter(s => s.status === 'Published').length,
     drafts: sermons.filter(s => s.status === 'Draft').length,
-    series: [...new Set(sermons.map(s => s.series).filter(Boolean))].length
+    series: [...new Set(sermons.map(s => s.series).filter((s): s is string => Boolean(s)))].length
   };
 
-  const seriesList = ['All', ...new Set(sermons.map(s => s.series).filter(Boolean))];
+  const seriesList = ['All', ...new Set(sermons.map(s => s.series).filter((s): s is string => Boolean(s)))];
   const filteredSermons = filter === 'All' ? sermons : sermons.filter(s => s.series === filter);
 
   if (loading && sermons.length === 0) {
