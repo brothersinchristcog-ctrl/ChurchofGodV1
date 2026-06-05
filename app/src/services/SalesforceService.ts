@@ -59,8 +59,6 @@ export interface WorshipSong {
   title: string;
   artist: string;
   key: string;
-  lyrics?: string;
-  category?: string;
 }
 
 export interface ScheduleEvent {
@@ -534,7 +532,7 @@ spfkUchVp71l4aWpCW50lro=
   async getWorshipSongs(): Promise<WorshipSong[]> {
     try {
       // 1. Primary: Fetch from new, clean Worship_Song__c object
-      const soql = `SELECT Id, Name, Song_Title_Telugu__c, Lyrics__c, Artist__c, Key_Signature__c, YouTube_ID__c, Category__c FROM Worship_Song__c WHERE Status__c = 'Published' ORDER BY CreatedDate DESC LIMIT 100`;
+      const soql = `SELECT Id, Name, Song_Title_Telugu__c, Lyrics__c, Artist__c, Key_Signature__c, YouTube_ID__c FROM Worship_Song__c WHERE Status__c = 'Published' ORDER BY CreatedDate DESC LIMIT 100`;
       const result = await this.query(soql, true).catch(async (err) => {
         console.warn('⚠️ Worship_Song__c custom object query failed. Falling back to Sermon__c.');
         // 2. Fail-Safe: Fall back to Sermon__c where name LIKE '%Song%'
@@ -560,7 +558,6 @@ spfkUchVp71l4aWpCW50lro=
         lyrics: rec.Lyrics__c || '',
         artist: rec.Artist__c || 'COG Worship',
         key: rec.Key_Signature__c || 'C',
-        category: rec.Category__c || 'Other',
         youtubeId: rec.YouTube_ID__c || ''
       }));
     } catch (error) { 
@@ -580,7 +577,6 @@ spfkUchVp71l4aWpCW50lro=
         Artist__c: details.artist,
         Lyrics__c: details.lyrics,
         Key_Signature__c: details.keySignature,
-        Category__c: details.category || 'Other',
         Status__c: details.status || 'Published',
         YouTube_ID__c: details.youtubeId
       };

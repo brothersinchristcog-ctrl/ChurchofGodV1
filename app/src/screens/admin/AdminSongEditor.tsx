@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useContext } from 'react';
 import {
   StyleSheet,
   View,
@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Music, Save, ChevronDown, CheckCircle, FileText, Globe } from 'lucide-react-native';
 import { AdminTabContext } from '../../context/AdminTabContext';
-import SalesforceService, { WorshipSong } from '../../services/SalesforceService';
+import SalesforceService from '../../services/SalesforceService';
 import { 
   getFirestore, 
   collection, 
@@ -27,15 +27,6 @@ import {
 const { width } = Dimensions.get('window');
 
 const KEYS = ['C', 'C# / Db', 'D', 'D# / Eb', 'E', 'F', 'F# / Gb', 'G', 'G# / Ab', 'A', 'A# / Bb', 'B'];
-const CATEGORIES = [
-  'Stuthi Songs',
-  'Aradhana Songs',
-  'Offering Songs',
-  'Christmas Songs',
-  'Easter Songs',
-  'Youth Songs',
-  'Other'
-];
 
 export default function AdminSongEditor() {
   const { setActiveTab } = useContext(AdminTabContext);
@@ -48,30 +39,11 @@ export default function AdminSongEditor() {
   const [keySignature, setKeySignature] = useState('C');
   const [lyrics, setLyrics] = useState('');
   const [status, setStatus] = useState('Published');
-  const [category, setCategory] = useState('Stuthi Songs');
   const [youtubeId, setYoutubeId] = useState('');
 
   const [showKeyPicker, setShowKeyPicker] = useState(false);
-  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [syncReceipt, setSyncReceipt] = useState({ savedTo: '', id: '' });
-  
-  const [recentSongs, setRecentSongs] = useState<WorshipSong[]>([]);
-  const [loadingRecent, setLoadingRecent] = useState(true);
-
-  useEffect(() => {
-    const fetchRecent = async () => {
-      try {
-        const data = await SalesforceService.getWorshipSongs();
-        setRecentSongs(data);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoadingRecent(false);
-      }
-    };
-    fetchRecent();
-  }, [syncReceipt]);
 
   const handlePublishSong = async () => {
     if (!titleEn.trim()) {
@@ -94,7 +66,6 @@ export default function AdminSongEditor() {
         keySignature: keySignature,
         lyrics: lyrics.trim(),
         status: status,
-        category: category,
         youtubeId: youtubeId.trim()
       });
 
@@ -115,7 +86,6 @@ export default function AdminSongEditor() {
           key: keySignature,
           lyrics: lyrics.trim(),
           status: status,
-          category: category,
           youtubeId: youtubeId.trim(),
           createdAt: serverTimestamp()
         });
@@ -215,35 +185,9 @@ export default function AdminSongEditor() {
               />
             </View>
 
-            <View style={{ width: 10 }} />
+            <View style={{ width: 15 }} />
 
-            <View style={[styles.inputGroup, { width: 140 }]}>
-              <Text style={styles.label}>CATEGORY</Text>
-              <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowCategoryPicker(!showCategoryPicker)}>
-                <Text style={styles.pickerTxt} numberOfLines={1}>{category}</Text>
-                <ChevronDown size={14} color="#64748b" />
-              </TouchableOpacity>
-              {showCategoryPicker && (
-                <View style={styles.dropdown}>
-                  <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled>
-                    {CATEGORIES.map(c => (
-                      <TouchableOpacity 
-                        key={c} 
-                        style={styles.dropItem} 
-                        onPress={() => { setCategory(c); setShowCategoryPicker(false); }}
-                      >
-                        <Text style={styles.dropTxt}>{c}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-            </View>
-          </View>
-          
-          {/* Key Signature (Full Row) */}
-          <View style={styles.row}>
-            <View style={[styles.inputGroup, { flex: 1 }]}>
+            <View style={[styles.inputGroup, { width: 120 }]}>
               <Text style={styles.label}>KEY SIGNATURE</Text>
               <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowKeyPicker(!showKeyPicker)}>
                 <Text style={styles.pickerTxt}>{keySignature}</Text>
@@ -323,41 +267,6 @@ export default function AdminSongEditor() {
             </>
           )}
         </TouchableOpacity>
-
-        {/* Recent Songs Section */}
-        <View style={styles.card}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-            <Text style={styles.sectionTitle}>RECENTLY POSTED SONGS</Text>
-            {!loadingRecent && (
-              <View style={styles.countBadge}>
-                <Text style={styles.countTxt}>{recentSongs.length} Total</Text>
-              </View>
-            )}
-          </View>
-
-          {loadingRecent ? (
-            <ActivityIndicator size="small" color="#c0392b" style={{ marginVertical: 20 }} />
-          ) : recentSongs.length === 0 ? (
-            <Text style={{ textAlign: 'center', color: '#64748b', fontSize: 12, marginVertical: 10 }}>No songs posted yet.</Text>
-          ) : (
-            recentSongs.slice(0, 10).map((song, idx) => (
-              <View key={song.id || idx} style={styles.recentItem}>
-                <View style={styles.recentIconBox}>
-                  <Music size={14} color="#1a2d5a" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.recentTitle} numberOfLines={1}>{song.title}</Text>
-                  <Text style={styles.recentSub} numberOfLines={1}>Category: {song.category || 'Other'} • Key: {song.key}</Text>
-                </View>
-              </View>
-            ))
-          )}
-          {recentSongs.length > 10 && (
-            <Text style={{ textAlign: 'center', color: '#64748b', fontSize: 11, marginTop: 10, fontStyle: 'italic' }}>
-              Showing 10 of {recentSongs.length} songs.
-            </Text>
-          )}
-        </View>
 
         <View style={{ height: 60 }} />
       </ScrollView>
@@ -517,13 +426,6 @@ const styles = StyleSheet.create({
   statusBtnActiveDraft: { backgroundColor: '#64748b' },
   statusBtnTxt: { fontSize: 12, color: '#475569', fontWeight: '700' },
   statusBtnTxtActive: { color: '#fff' },
-
-  countBadge: { backgroundColor: '#ecfdf5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-  countTxt: { fontSize: 10, fontWeight: '800', color: '#059669' },
-  recentItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  recentIconBox: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#f8fafc', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  recentTitle: { fontSize: 13, fontWeight: '700', color: '#1e293b' },
-  recentSub: { fontSize: 10, color: '#64748b', marginTop: 2, fontWeight: '500' },
 
   infoBox: { 
     flexDirection: 'row', 

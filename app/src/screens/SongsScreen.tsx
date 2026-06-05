@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
+  Text,
   FlatList,
-  SectionList,
   TouchableOpacity,
   TextInput,
   StatusBar,
@@ -47,6 +47,7 @@ const STATIC_LYRICS: StaticLyricSong[] = []; // Replaced by dynamic Salesforce f
 
 export default function SongsScreen({ navigation }: any) {
   const { isDark } = useTheme();
+  const [activeTab, setActiveTab] = useState<'list' | 'lyrics'>('list');
   const [search, setSearch] = useState('');
   const [songs, setSongs] = useState<WorshipSong[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,23 +87,18 @@ export default function SongsScreen({ navigation }: any) {
     );
   });
 
-  // Group filtered songs into sections by category
-  const sectionsMap = new Map<string, WorshipSong[]>();
-  filteredSongs.forEach(song => {
-    const cat = song.category || 'Other';
-    if (!sectionsMap.has(cat)) sectionsMap.set(cat, []);
-    sectionsMap.get(cat)!.push(song);
+  // Filter Dynamic Lyrics (Salesforce Songs under Lyrics View)
+  const filteredLyrics = songs.filter(s => {
+    const songData = s as any;
+    const query = search.toLowerCase().trim();
+    return (
+      s.title.toLowerCase().includes(query) || 
+      (songData.titleTe && songData.titleTe.toLowerCase().includes(query)) ||
+      (s.artist && s.artist.toLowerCase().includes(query))
+    );
   });
 
-  const sections = Array.from(sectionsMap.entries())
-    .map(([title, data]) => ({ title, data }))
-    .sort((a, b) => {
-      if (a.title === 'Other') return 1;
-      if (b.title === 'Other') return -1;
-      return a.title.localeCompare(b.title);
-    });
-
-  const renderWorshipSong = ({ item, index }: { item: WorshipSong, index: number }) => {
+  const renderWorshipSong = ({ item }: { item: WorshipSong }) => {
     const songData = item as any;
     const lyricSong: StaticLyricSong = {
       id: item.id,
@@ -123,7 +119,7 @@ export default function SongsScreen({ navigation }: any) {
           <Music size={18} color="#1a2d5a" />
         </View>
         <View style={styles.info}>
-          <Text style={[styles.title, { color: isDark ? '#fff' : '#111827' }]} numberOfLines={1}>{index + 1}. {item.title}</Text>
+          <Text style={[styles.title, { color: isDark ? '#fff' : '#111827' }]} numberOfLines={1}>{item.title}</Text>
           <Text style={[styles.artist, { color: isDark ? '#94a3b8' : '#6B7280' }]} numberOfLines={1}>
             {songData.titleTe ? `${songData.titleTe} · ` : ''}{item.artist}
           </Text>
@@ -186,11 +182,39 @@ export default function SongsScreen({ navigation }: any) {
         <View style={{ width: 40 }} />
       </View>
 
+      {/* Elegant Sub-Tab Toggle */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'list' && styles.tabActive]}
+          onPress={() => {
+            setActiveTab('list');
+            setSearch('');
+          }}
+        >
+          <Music size={14} color={activeTab === 'list' ? '#fff' : '#64748b'} />
+          <Text style={[styles.tabText, activeTab === 'list' && styles.tabTextActive]}>
+            Worship Songs List
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'lyrics' && styles.tabActive]}
+          onPress={() => {
+            setActiveTab('lyrics');
+            setSearch('');
+          }}
+        >
+          <FileText size={14} color={activeTab === 'lyrics' ? '#fff' : '#64748b'} />
+          <Text style={[styles.tabText, activeTab === 'lyrics' && styles.tabTextActive]}>
+            Lyrics / Scripts
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Search Bar */}
-      <View style={[styles.searchBarContainer, { backgroundColor: isDark ? '#1e293b' : '#fff', marginTop: 15 }]}>
+      <View style={[styles.searchBarContainer, { backgroundColor: isDark ? '#1e293b' : '#fff' }]}>
         <Search size={20} color={isDark ? '#94a3b8' : '#64748b'} />
         <TextInput
-          placeholder="Search by song name, key, or category..."
+          placeholder={activeTab === 'list' ? "Search worship songs list..." : "Search scripts & lyrics..."}
           placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
           style={[styles.searchInput, { color: isDark ? '#fff' : '#0f172a' }]}
           value={search}
@@ -205,31 +229,49 @@ export default function SongsScreen({ navigation }: any) {
         )}
       </View>
 
-      {/* Main List */}
-      {loading && !refreshing ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#fbbf24" />
-        </View>
+      {/* Main Lists */}
+      {activeTab === 'list' ? (
+        loading && !refreshing ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#fbbf24" />
+          </View>
+        ) : (
+          <FlatList
+            data={filteredSongs}
+            keyExtractor={(item) => item.id}
+            renderItem={renderWorshipSong}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a2d5a" />
+            }
+            ListHeaderComponent={() => (
+              <Text style={styles.secLbl}>CHURCH CHORD LIST · గీతాల జాబితా</Text>
+            )}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <AlertCircle size={44} color="#cbd5e1" />
+                <Text style={[styles.emptyTitle, { color: isDark ? '#94a3b8' : '#1a2d5a' }]}>No worship songs found</Text>
+                <Text style={styles.emptySub}>Refresh the list or search a different chord</Text>
+              </View>
+            }
+          />
+        )
       ) : (
-        <SectionList
-          sections={sections}
+        <FlatList
+          data={filteredLyrics}
           keyExtractor={(item) => item.id}
-          renderItem={renderWorshipSong}
-          renderSectionHeader={({ section: { title } }) => (
-            <View style={styles.sectionHeaderBox}>
-              <Text style={styles.sectionHeaderTxt}>{title}</Text>
-            </View>
-          )}
+          renderItem={renderLyricItem}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a2d5a" />
-          }
+          ListHeaderComponent={() => (
+            <Text style={styles.secLbl}>PRAISE SCRIPTS · లిరిక్స్ / స్క్రిప్ట్స్</Text>
+          )}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <AlertCircle size={44} color="#cbd5e1" />
-              <Text style={[styles.emptyTitle, { color: isDark ? '#94a3b8' : '#1a2d5a' }]}>No worship songs found</Text>
-              <Text style={styles.emptySub}>Refresh the list or search a different chord</Text>
+              <Text style={[styles.emptyTitle, { color: isDark ? '#94a3b8' : '#1a2d5a' }]}>No lyrics found</Text>
+              <Text style={styles.emptySub}>Try searching other titles</Text>
             </View>
           }
         />
@@ -373,19 +415,6 @@ const styles = StyleSheet.create({
 
   listContent: { paddingBottom: 40 },
   secLbl: { fontSize: 10, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.8, marginHorizontal: 16, marginBottom: 12, marginTop: 5 },
-  sectionHeaderBox: {
-    backgroundColor: '#e2e8f0',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginBottom: 10,
-  },
-  sectionHeaderTxt: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#1a2d5a',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase'
-  },
 
   // Song Card
   songCard: { 
