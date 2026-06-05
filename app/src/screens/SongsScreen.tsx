@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   View,
   Text,
   FlatList,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   TextInput,
   StatusBar,
   ActivityIndicator,
@@ -16,44 +17,59 @@ import {
   ScrollView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { 
-  ChevronLeft, 
-  Search, 
-  Music, 
-  ChevronRight, 
-  Play, 
+import {
+  ChevronLeft,
+  Search,
+  Music,
+  ChevronRight,
   AlertCircle,
-  FileText,
-  X,
-  BookOpen
+  BookMarked,
+  Bookmark,
+  X
 } from 'lucide-react-native';
-import Theme from '../theme/Theme';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import SalesforceService, { WorshipSong } from '../services/SalesforceService';
 import { useTheme } from '../context/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
 
-interface StaticLyricSong {
-  id: string;
-  titleEn: string;
-  titleTe: string;
-  artist: string;
-  lyricsEn: string;
-  lyricsTe: string;
-  suggestedKey: string;
-}
+const SONGBOOK_KEY = 'cog_my_songbook_ids';
 
-const STATIC_LYRICS: StaticLyricSong[] = []; // Replaced by dynamic Salesforce feed below
+const CATEGORIES = [
+  'All',
+  'Stuthi Songs',
+  'Aradhana Songs',
+  'Offering Songs',
+  'Christmas Songs',
+  'Easter Songs',
+  'Youth Songs',
+  'Other'
+];
 
 export default function SongsScreen({ navigation }: any) {
   const { isDark } = useTheme();
-  const [activeTab, setActiveTab] = useState<'list' | 'lyrics'>('list');
-  const [search, setSearch] = useState('');
+
+  // ── Tabs ──────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<'browse' | 'songbook'>('browse');
+
+  // ── All Songs ─────────────────────────────────────
   const [songs, setSongs] = useState<WorshipSong[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedLyricSong, setSelectedLyricSong] = useState<StaticLyricSong | null>(null);
 
+  // ── Category filter ───────────────────────────────
+  const [selectedCategory, setSelectedCategory] = useState('All');
+
+  // ── Search ────────────────────────────────────────
+  const [search, setSearch] = useState('');
+
+  // ── My Songbook ───────────────────────────────────
+  const [savedIds, setSavedIds] = useState<string[]>([]);
+
+  // ── Lyrics Modal ──────────────────────────────────
+  const [selectedSong, setSelectedSong] = useState<WorshipSong | null>(null);
+
+  // ── Load songs ────────────────────────────────────
   const fetchSongs = async () => {
     try {
       const data = await SalesforceService.getWorshipSongs();
@@ -66,101 +82,76 @@ export default function SongsScreen({ navigation }: any) {
     }
   };
 
-  useEffect(() => {
-    fetchSongs();
-  }, []);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchSongs();
+  // ── Load saved songbook from storage ─────────────
+  const loadSavedIds = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(SONGBOOK_KEY);
+      if (raw) setSavedIds(JSON.parse(raw));
+    } catch { /* ignore */ }
   };
 
-  // Filter Worship Songs (Dynamic Salesforce Songs)
-  const filteredSongs = songs.filter(s => {
-    const songData = s as any;
-    const query = search.toLowerCase().trim();
-    return (
-      s.title.toLowerCase().includes(query) || 
-      (songData.titleTe && songData.titleTe.toLowerCase().includes(query)) ||
-      (s.artist && s.artist.toLowerCase().includes(query)) ||
-      (s.key && s.key.toLowerCase().includes(query))
-    );
+  useEffect(() => {
+    fetchSongs();
+    loadSavedIds();
+  }, []);
+
+  const onRefresh = () => { setRefreshing(true); fetchSongs(); };
+
+  // ── Toggle save/unsave song ───────────────────────
+  const toggleSave = async (song: WorshipSong) => {
+    const isAlreadySaved = savedIds.includes(song.id);
+    let newIds: string[];
+    if (isAlreadySaved) {
+      newIds = savedIds.filter(id => id !== song.id);
+      Alert.alert('Removed', `"${song.title}" has been removed from your Songbook.`);
+    } else {
+      newIds = [...savedIds, song.id];
+      Alert.alert('✅ Saved!', `"${song.title}" has been added to your Songbook.`);
+    }
+    setSavedIds(newIds);
+    await AsyncStorage.setItem(SONGBOOK_KEY, JSON.stringify(newIds));
+  };
+
+  // ── Filtered songs ────────────────────────────────
+  const filteredBrowse = songs.filter(s => {
+    const q = search.toLowerCase().trim();
+    const matchCategory = selectedCategory === 'All' || (s.category || 'Other') === selectedCategory;
+    const matchSearch = !q ||
+      s.title.toLowerCase().includes(q) ||
+      (s.titleTe && s.titleTe.toLowerCase().includes(q)) ||
+      (s.artist && s.artist.toLowerCase().includes(q));
+    return matchCategory && matchSearch;
   });
 
-  // Filter Dynamic Lyrics (Salesforce Songs under Lyrics View)
-  const filteredLyrics = songs.filter(s => {
-    const songData = s as any;
-    const query = search.toLowerCase().trim();
-    return (
-      s.title.toLowerCase().includes(query) || 
-      (songData.titleTe && songData.titleTe.toLowerCase().includes(query)) ||
-      (s.artist && s.artist.toLowerCase().includes(query))
-    );
+  const savedSongs = songs.filter(s => savedIds.includes(s.id));
+  const filteredSongbook = savedSongs.filter(s => {
+    const q = search.toLowerCase().trim();
+    return !q || s.title.toLowerCase().includes(q) || (s.titleTe && s.titleTe.toLowerCase().includes(q));
   });
 
-  const renderWorshipSong = ({ item }: { item: WorshipSong }) => {
-    const songData = item as any;
-    const lyricSong: StaticLyricSong = {
-      id: item.id,
-      titleEn: item.title,
-      titleTe: songData.titleTe || '',
-      artist: item.artist || 'COG Worship',
-      suggestedKey: item.key || 'C',
-      lyricsEn: songData.lyrics || 'Lyrics details are currently being updated in Salesforce by the administrator.',
-      lyricsTe: ''
-    };
-
+  // ── Song Card ─────────────────────────────────────
+  const renderSongCard = ({ item, index }: { item: WorshipSong; index: number }) => {
+    const isSaved = savedIds.includes(item.id);
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[styles.songCard, { backgroundColor: isDark ? '#1e293b' : '#fff', borderColor: isDark ? '#334155' : '#e5e7eb' }]}
-        onPress={() => setSelectedLyricSong(lyricSong)}
+        onPress={() => setSelectedSong(item)}
+        onLongPress={() => toggleSave(item)}
+        delayLongPress={400}
       >
-        <View style={[styles.iconBox, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
-          <Music size={18} color="#1a2d5a" />
+        <View style={[styles.indexBox, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
+          <Text style={styles.indexTxt}>{index + 1}</Text>
         </View>
         <View style={styles.info}>
           <Text style={[styles.title, { color: isDark ? '#fff' : '#111827' }]} numberOfLines={1}>{item.title}</Text>
           <Text style={[styles.artist, { color: isDark ? '#94a3b8' : '#6B7280' }]} numberOfLines={1}>
-            {songData.titleTe ? `${songData.titleTe} · ` : ''}{item.artist}
+            {item.titleTe ? `${item.titleTe} · ` : ''}{item.artist}
           </Text>
         </View>
         <View style={styles.keyBadge}>
           <Text style={styles.keyTxt}>KEY: {item.key || 'C'}</Text>
         </View>
-        <ChevronRight size={16} color={isDark ? '#475569' : '#D1D5DB'} />
-      </TouchableOpacity>
-    );
-  };
-
-  const renderLyricItem = ({ item }: { item: WorshipSong }) => {
-    const songData = item as any;
-    const lyricSong: StaticLyricSong = {
-      id: item.id,
-      titleEn: item.title,
-      titleTe: songData.titleTe || '',
-      artist: item.artist || 'COG Worship',
-      suggestedKey: item.key || 'C',
-      lyricsEn: songData.lyrics || 'Lyrics details are currently being updated in Salesforce by the administrator.',
-      lyricsTe: ''
-    };
-
-    return (
-      <TouchableOpacity 
-        style={[styles.songCard, { backgroundColor: isDark ? '#1e293b' : '#fff', borderColor: isDark ? '#334155' : '#e5e7eb' }]}
-        onPress={() => setSelectedLyricSong(lyricSong)}
-      >
-        <View style={[styles.iconBox, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
-          <FileText size={18} color="#0F766E" />
-        </View>
-        <View style={styles.info}>
-          <Text style={[styles.title, { color: isDark ? '#fff' : '#111827' }]} numberOfLines={1}>{item.title}</Text>
-          <Text style={[styles.artist, { color: isDark ? '#94a3b8' : '#6B7280' }]} numberOfLines={1}>
-            {songData.titleTe ? `${songData.titleTe} · ` : ''}{item.artist}
-          </Text>
-        </View>
-        <View style={[styles.keyBadge, { backgroundColor: '#eff6ff' }]}>
-          <Text style={[styles.keyTxt, { color: '#1e40af' }]}>KEY: {item.key || 'C'}</Text>
-        </View>
+        {isSaved && <Bookmark size={14} color="#c0392b" style={{ marginRight: 4 }} />}
         <ChevronRight size={16} color={isDark ? '#475569' : '#D1D5DB'} />
       </TouchableOpacity>
     );
@@ -169,8 +160,8 @@ export default function SongsScreen({ navigation }: any) {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0f172a' : '#f8fafc' }]} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor="#1a2d5a" />
-      
-      {/* Header */}
+
+      {/* ── Header ── */}
       <View style={styles.pageHeader}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <ChevronLeft size={24} color="#fff" />
@@ -182,145 +173,148 @@ export default function SongsScreen({ navigation }: any) {
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Elegant Sub-Tab Toggle */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'list' && styles.tabActive]}
-          onPress={() => {
-            setActiveTab('list');
-            setSearch('');
-          }}
-        >
-          <Music size={14} color={activeTab === 'list' ? '#fff' : '#64748b'} />
-          <Text style={[styles.tabText, activeTab === 'list' && styles.tabTextActive]}>
-            Worship Songs List
-          </Text>
+      {/* ── Main Tabs ── */}
+      <View style={styles.tabBar}>
+        <TouchableOpacity style={[styles.tab, activeTab === 'browse' && styles.tabActive]}
+          onPress={() => { setActiveTab('browse'); setSearch(''); }}>
+          <Music size={14} color={activeTab === 'browse' ? '#fff' : '#64748b'} />
+          <Text style={[styles.tabTxt, activeTab === 'browse' && styles.tabTxtActive]}>Browse Songs</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'lyrics' && styles.tabActive]}
-          onPress={() => {
-            setActiveTab('lyrics');
-            setSearch('');
-          }}
-        >
-          <FileText size={14} color={activeTab === 'lyrics' ? '#fff' : '#64748b'} />
-          <Text style={[styles.tabText, activeTab === 'lyrics' && styles.tabTextActive]}>
-            Lyrics / Scripts
+        <TouchableOpacity style={[styles.tab, activeTab === 'songbook' && styles.tabActive]}
+          onPress={() => { setActiveTab('songbook'); setSearch(''); }}>
+          <BookMarked size={14} color={activeTab === 'songbook' ? '#fff' : '#64748b'} />
+          <Text style={[styles.tabTxt, activeTab === 'songbook' && styles.tabTxtActive]}>
+            My Songbook {savedIds.length > 0 ? `(${savedIds.length})` : ''}
           </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Search Bar */}
-      <View style={[styles.searchBarContainer, { backgroundColor: isDark ? '#1e293b' : '#fff' }]}>
-        <Search size={20} color={isDark ? '#94a3b8' : '#64748b'} />
+      {/* ── Category Chips (Browse only) ── */}
+      {activeTab === 'browse' && (
+        <ScrollView
+          horizontal showsHorizontalScrollIndicator={false}
+          style={styles.chipScroll} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, alignItems: 'center' }}>
+          {CATEGORIES.map(cat => (
+            <TouchableOpacity
+              key={cat}
+              style={[styles.chip, selectedCategory === cat && styles.chipActive]}
+              onPress={() => setSelectedCategory(cat)}>
+              <Text style={[styles.chipTxt, selectedCategory === cat && styles.chipTxtActive]}>{cat}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
+      {/* ── Search Bar ── */}
+      <View style={[styles.searchBar, { backgroundColor: isDark ? '#1e293b' : '#fff' }]}>
+        <Search size={18} color={isDark ? '#94a3b8' : '#64748b'} />
         <TextInput
-          placeholder={activeTab === 'list' ? "Search worship songs list..." : "Search scripts & lyrics..."}
+          placeholder={activeTab === 'browse' ? 'Search songs...' : 'Search your songbook...'}
           placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
           style={[styles.searchInput, { color: isDark ? '#fff' : '#0f172a' }]}
-          value={search}
-          onChangeText={setSearch}
-          autoCorrect={false}
-          autoCapitalize="none"
+          value={search} onChangeText={setSearch}
+          autoCorrect={false} autoCapitalize="none"
         />
         {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')} style={styles.searchClearBtn}>
-            <Text style={styles.searchClearTxt}>×</Text>
+          <TouchableOpacity onPress={() => setSearch('')}>
+            <X size={16} color="#94a3b8" />
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Main Lists */}
-      {activeTab === 'list' ? (
+      {/* ── Long Press hint ── */}
+      {activeTab === 'browse' && (
+        <Text style={styles.hint}>💡 Long press a song to add it to My Songbook</Text>
+      )}
+      {activeTab === 'songbook' && (
+        <Text style={styles.hint}>💡 Long press a song to remove it from your Songbook</Text>
+      )}
+
+      {/* ── Browse List ── */}
+      {activeTab === 'browse' && (
         loading && !refreshing ? (
-          <View style={styles.loadingContainer}>
+          <View style={styles.loadingBox}>
             <ActivityIndicator size="large" color="#fbbf24" />
           </View>
         ) : (
           <FlatList
-            data={filteredSongs}
-            keyExtractor={(item) => item.id}
-            renderItem={renderWorshipSong}
+            data={filteredBrowse}
+            keyExtractor={item => item.id}
+            renderItem={renderSongCard}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a2d5a" />
-            }
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a2d5a" />}
             ListHeaderComponent={() => (
-              <Text style={styles.secLbl}>CHURCH CHORD LIST · గీతాల జాబితా</Text>
+              <Text style={styles.secLbl}>
+                {selectedCategory === 'All' ? 'ALL SONGS' : selectedCategory.toUpperCase()} · {filteredBrowse.length} Songs
+              </Text>
             )}
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <AlertCircle size={44} color="#cbd5e1" />
-                <Text style={[styles.emptyTitle, { color: isDark ? '#94a3b8' : '#1a2d5a' }]}>No worship songs found</Text>
-                <Text style={styles.emptySub}>Refresh the list or search a different chord</Text>
+                <Text style={[styles.emptyTitle, { color: isDark ? '#94a3b8' : '#1a2d5a' }]}>No songs found</Text>
+                <Text style={styles.emptySub}>Try a different category or search term</Text>
               </View>
             }
           />
         )
-      ) : (
+      )}
+
+      {/* ── My Songbook ── */}
+      {activeTab === 'songbook' && (
         <FlatList
-          data={filteredLyrics}
-          keyExtractor={(item) => item.id}
-          renderItem={renderLyricItem}
+          data={filteredSongbook}
+          keyExtractor={item => item.id}
+          renderItem={renderSongCard}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={() => (
-            <Text style={styles.secLbl}>PRAISE SCRIPTS · లిరిక్స్ / స్క్రిప్ట్స్</Text>
+            <Text style={styles.secLbl}>MY SAVED SONGS · {filteredSongbook.length} Songs</Text>
           )}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <AlertCircle size={44} color="#cbd5e1" />
-              <Text style={[styles.emptyTitle, { color: isDark ? '#94a3b8' : '#1a2d5a' }]}>No lyrics found</Text>
-              <Text style={styles.emptySub}>Try searching other titles</Text>
+              <BookMarked size={44} color="#cbd5e1" />
+              <Text style={[styles.emptyTitle, { color: isDark ? '#94a3b8' : '#1a2d5a' }]}>Your Songbook is empty</Text>
+              <Text style={styles.emptySub}>Browse songs and long-press to save them here</Text>
             </View>
           }
         />
       )}
 
-      {/* Lyrics Detail Modal */}
-      {selectedLyricSong && (
-        <Modal
-          visible={true}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setSelectedLyricSong(null)}
-        >
+      {/* ── Lyrics Modal ── */}
+      {selectedSong && (
+        <Modal visible animationType="slide" transparent onRequestClose={() => setSelectedSong(null)}>
           <View style={styles.modalBg}>
             <View style={[styles.modalCard, { backgroundColor: isDark ? '#1e293b' : '#fff' }]}>
-              {/* Modal Header */}
               <View style={styles.modalHeader}>
-                <View>
-                  <Text style={[styles.modalTitleEn, { color: isDark ? '#fff' : '#0f172a' }]}>{selectedLyricSong.titleEn}</Text>
-                  <Text style={styles.modalTitleTe}>{selectedLyricSong.titleTe} · Key: {selectedLyricSong.suggestedKey}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.modalTitleEn, { color: isDark ? '#fff' : '#0f172a' }]} numberOfLines={2}>
+                    {selectedSong.title}
+                  </Text>
+                  <Text style={styles.modalTitleTe}>
+                    {selectedSong.titleTe ? `${selectedSong.titleTe} · ` : ''}Key: {selectedSong.key || 'C'}
+                  </Text>
+                  <Text style={styles.modalCategory}>{selectedSong.category || 'Other'}</Text>
                 </View>
-                <TouchableOpacity 
-                  style={[styles.modalCloseBtn, { backgroundColor: isDark ? '#334155' : '#f1f5f9' }]} 
-                  onPress={() => setSelectedLyricSong(null)}
-                >
-                  <X size={20} color={isDark ? '#fff' : '#475569'} />
-                </TouchableOpacity>
+                <View style={{ gap: 8, alignItems: 'flex-end' }}>
+                  <TouchableOpacity style={[styles.modalCloseBtn, { backgroundColor: isDark ? '#334155' : '#f1f5f9' }]}
+                    onPress={() => setSelectedSong(null)}>
+                    <X size={20} color={isDark ? '#fff' : '#475569'} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.bookmarkBtn, savedIds.includes(selectedSong.id) && styles.bookmarkBtnActive]}
+                    onPress={() => toggleSave(selectedSong)}>
+                    <Bookmark size={16} color={savedIds.includes(selectedSong.id) ? '#fff' : '#c0392b'} />
+                  </TouchableOpacity>
+                </View>
               </View>
 
-              {/* Modal Body */}
               <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-                {selectedLyricSong.lyricsEn ? (
-                  <>
-                    <Text style={[styles.modalSecHeader, { color: '#1a2d5a' }]}>LYRICS & SCRIPTS · సాహిత్యం</Text>
-                    <View style={[styles.lyricsBox, { backgroundColor: isDark ? '#0f172a' : '#f8fafc' }]}>
-                      <Text style={[styles.lyricsText, { color: isDark ? '#e2e8f0' : '#334155' }]}>{selectedLyricSong.lyricsEn}</Text>
-                    </View>
-                  </>
-                ) : null}
-
-                {selectedLyricSong.lyricsTe ? (
-                  <>
-                    <View style={{ height: 20 }} />
-                    <Text style={[styles.modalSecHeader, { color: '#0F766E' }]}>తెలుగు లిరిక్స్</Text>
-                    <View style={[styles.lyricsBox, { backgroundColor: isDark ? '#0f172a' : '#f8fafc' }]}>
-                      <Text style={[styles.lyricsText, { color: isDark ? '#e2e8f0' : '#334155', fontSize: 14 }]}>{selectedLyricSong.lyricsTe}</Text>
-                    </View>
-                  </>
-                ) : null}
+                <Text style={styles.modalSecHeader}>LYRICS & SCRIPTS · సాహిత్యం</Text>
+                <View style={[styles.lyricsBox, { backgroundColor: isDark ? '#0f172a' : '#f8fafc' }]}>
+                  <Text style={[styles.lyricsText, { color: isDark ? '#e2e8f0' : '#334155' }]}>
+                    {selectedSong.lyrics || 'Lyrics are being updated by the administrator. Please check back soon.'}
+                  </Text>
+                </View>
                 <View style={{ height: 60 }} />
               </ScrollView>
             </View>
@@ -333,17 +327,11 @@ export default function SongsScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', minHeight: 200 },
-  
-  // Header
+  loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
   pageHeader: {
-    backgroundColor: '#1a2d5a',
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomLeftRadius: 15,
-    borderBottomRightRadius: 15,
+    backgroundColor: '#1a2d5a', paddingHorizontal: 16, paddingVertical: 15,
+    flexDirection: 'row', alignItems: 'center', borderBottomLeftRadius: 15, borderBottomRightRadius: 15
   },
   backBtn: { padding: 4 },
   titleCol: { flex: 1, alignItems: 'center' },
@@ -351,98 +339,62 @@ const styles = StyleSheet.create({
   pageSub: { color: '#aac4e8', fontSize: 10, marginTop: 1, fontWeight: '500' },
 
   // Tabs
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#e2e8f0',
-    marginHorizontal: 16,
-    marginVertical: 15,
-    borderRadius: 25,
-    padding: 4,
-    gap: 4
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 21,
-    gap: 6
-  },
+  tabBar: { flexDirection: 'row', backgroundColor: '#e2e8f0', marginHorizontal: 16, marginTop: 15, marginBottom: 0, borderRadius: 25, padding: 4, gap: 4 },
+  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 21, gap: 6 },
   tabActive: { backgroundColor: '#1a2d5a' },
-  tabText: { fontSize: 12, fontWeight: '700', color: '#64748b' },
-  tabTextActive: { color: '#fff' },
+  tabTxt: { fontSize: 12, fontWeight: '700', color: '#64748b' },
+  tabTxtActive: { color: '#fff' },
 
-  // Search Bar
-  searchBarContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 16,
-    marginBottom: 15,
-    borderRadius: 16,
-    paddingHorizontal: 15,
-    height: 48,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 2 },
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+  // Category chips
+  chipScroll: { marginTop: 12, maxHeight: 44 },
+  chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: '#e2e8f0', borderWidth: 1, borderColor: '#e2e8f0' },
+  chipActive: { backgroundColor: '#1a2d5a', borderColor: '#1a2d5a' },
+  chipTxt: { fontSize: 12, fontWeight: '700', color: '#475569' },
+  chipTxtActive: { color: '#fff' },
+
+  // Search
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginTop: 12, marginBottom: 4,
+    borderRadius: 14, paddingHorizontal: 14, height: 46, elevation: 2,
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, borderWidth: 1, borderColor: '#e2e8f0'
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '600',
-    paddingVertical: 8,
-    marginLeft: 8
-  },
-  searchClearBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#cbd5e1',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  searchClearTxt: {
-    color: '#475569',
-    fontSize: 14,
-    fontWeight: '900',
-    lineHeight: 16,
-    textAlign: 'center',
-  },
+  searchInput: { flex: 1, fontSize: 13, fontWeight: '600', paddingVertical: 8, marginLeft: 8 },
+
+  hint: { fontSize: 10, color: '#94a3b8', textAlign: 'center', marginTop: 4, marginBottom: 8, fontStyle: 'italic' },
 
   listContent: { paddingBottom: 40 },
-  secLbl: { fontSize: 10, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.8, marginHorizontal: 16, marginBottom: 12, marginTop: 5 },
+  secLbl: { fontSize: 10, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.8, marginHorizontal: 16, marginBottom: 10, marginTop: 6 },
 
   // Song Card
-  songCard: { 
-    borderRadius: 16, borderWidth: 0.5, 
-    marginHorizontal: 16, marginBottom: 10, flexDirection: 'row', alignItems: 'center', padding: 12,
-    elevation: 2, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }
+  songCard: {
+    borderRadius: 14, borderWidth: 0.5, marginHorizontal: 16, marginBottom: 9,
+    flexDirection: 'row', alignItems: 'center', padding: 12,
+    elevation: 2, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 3
   },
-  iconBox: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  indexBox: { width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  indexTxt: { fontSize: 13, fontWeight: '800', color: '#1a2d5a' },
   info: { flex: 1 },
-  title: { fontSize: 14, fontWeight: '700' },
+  title: { fontSize: 13, fontWeight: '700' },
   artist: { fontSize: 11, marginTop: 2, fontWeight: '500' },
-  
-  keyBadge: { backgroundColor: '#F0FDF4', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, marginRight: 10 },
+  keyBadge: { backgroundColor: '#F0FDF4', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7, marginRight: 6 },
   keyTxt: { fontSize: 9, color: '#166534', fontWeight: '800' },
 
   emptyState: { padding: 40, alignItems: 'center', marginTop: 30 },
   emptyTitle: { fontSize: 15, fontWeight: '800', marginTop: 12 },
   emptySub: { fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 4 },
 
-  // Modal styles
+  // Lyrics Modal
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalCard: { borderTopLeftRadius: 25, borderTopRightRadius: 25, height: height * 0.85, padding: 20 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 0.5, borderColor: '#cbd5e1', paddingBottom: 15, marginBottom: 15 },
-  modalTitleEn: { fontSize: 18, fontWeight: '900' },
-  modalTitleTe: { fontSize: 12, color: '#94a3b8', marginTop: 2, fontWeight: '700' },
-  modalCloseBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  modalCard: { borderTopLeftRadius: 25, borderTopRightRadius: 25, height: height * 0.87, padding: 20 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', borderBottomWidth: 0.5, borderColor: '#cbd5e1', paddingBottom: 14, marginBottom: 14 },
+  modalTitleEn: { fontSize: 17, fontWeight: '900' },
+  modalTitleTe: { fontSize: 11, color: '#94a3b8', marginTop: 3, fontWeight: '700' },
+  modalCategory: { fontSize: 10, color: '#c0392b', fontWeight: '800', marginTop: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
+  modalCloseBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  bookmarkBtn: { width: 34, height: 34, borderRadius: 17, borderWidth: 1.5, borderColor: '#c0392b', alignItems: 'center', justifyContent: 'center' },
+  bookmarkBtnActive: { backgroundColor: '#c0392b', borderColor: '#c0392b' },
   modalScroll: { flex: 1 },
-  modalSecHeader: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
-  lyricsBox: { borderRadius: 16, padding: 16, borderWidth: 0.5, borderColor: '#e2e8f0' },
-  lyricsText: { fontSize: 13, lineHeight: 22, fontWeight: '600', fontStyle: 'italic' }
+  modalSecHeader: { fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10, color: '#1a2d5a' },
+  lyricsBox: { borderRadius: 14, padding: 16, borderWidth: 0.5, borderColor: '#e2e8f0' },
+  lyricsText: { fontSize: 13, lineHeight: 23, fontWeight: '500', fontStyle: 'italic' },
 });

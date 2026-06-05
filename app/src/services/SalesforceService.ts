@@ -57,8 +57,12 @@ export interface SalesforceVideo {
 export interface WorshipSong {
   id: string;
   title: string;
+  titleTe?: string;
   artist: string;
   key: string;
+  lyrics?: string;
+  category?: string;
+  youtubeId?: string;
 }
 
 export interface ScheduleEvent {
@@ -532,7 +536,7 @@ spfkUchVp71l4aWpCW50lro=
   async getWorshipSongs(): Promise<WorshipSong[]> {
     try {
       // 1. Primary: Fetch from new, clean Worship_Song__c object
-      const soql = `SELECT Id, Name, Song_Title_Telugu__c, Lyrics__c, Artist__c, Key_Signature__c, YouTube_ID__c FROM Worship_Song__c WHERE Status__c = 'Published' ORDER BY CreatedDate DESC LIMIT 100`;
+      const soql = `SELECT Id, Name, Song_Title_Telugu__c, Lyrics__c, Artist__c, Key_Signature__c, YouTube_ID__c, Category__c FROM Worship_Song__c WHERE Status__c = 'Published' ORDER BY CreatedDate DESC LIMIT 100`;
       const result = await this.query(soql, true).catch(async (err) => {
         console.warn('⚠️ Worship_Song__c custom object query failed. Falling back to Sermon__c.');
         // 2. Fail-Safe: Fall back to Sermon__c where name LIKE '%Song%'
@@ -558,6 +562,7 @@ spfkUchVp71l4aWpCW50lro=
         lyrics: rec.Lyrics__c || '',
         artist: rec.Artist__c || 'COG Worship',
         key: rec.Key_Signature__c || 'C',
+        category: rec.Category__c || 'Other',
         youtubeId: rec.YouTube_ID__c || ''
       }));
     } catch (error) { 
@@ -577,6 +582,7 @@ spfkUchVp71l4aWpCW50lro=
         Artist__c: details.artist,
         Lyrics__c: details.lyrics,
         Key_Signature__c: details.keySignature,
+        Category__c: details.category || 'Other',
         Status__c: details.status || 'Published',
         YouTube_ID__c: details.youtubeId
       };
@@ -636,6 +642,38 @@ spfkUchVp71l4aWpCW50lro=
       }
     } catch (error) {
       console.error('❌ [SalesforceService] createWorshipSong Error:', error);
+      throw error;
+    }
+  }
+
+  async updateWorshipSong(id: string, details: any): Promise<{ success: boolean }> {
+    try {
+      const token = await this.getAccessToken();
+      const url = `${this.instanceUrl}/services/data/v60.0/sobjects/Worship_Song__c/${id}`;
+      const body: any = {};
+      if (details.titleEn !== undefined) body.Name = details.titleEn;
+      if (details.titleTe !== undefined) body.Song_Title_Telugu__c = details.titleTe;
+      if (details.artist !== undefined) body.Artist__c = details.artist;
+      if (details.lyrics !== undefined) body.Lyrics__c = details.lyrics;
+      if (details.keySignature !== undefined) body.Key_Signature__c = details.keySignature;
+      if (details.category !== undefined) body.Category__c = details.category;
+      if (details.status !== undefined) body.Status__c = details.status;
+      if (details.youtubeId !== undefined) body.YouTube_ID__c = details.youtubeId;
+
+      const resp = await fetch(url, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ([{ message: 'Unknown error' }]));
+        throw new Error(errData[0]?.message || 'Song update failed');
+      }
+      console.log('✅ [SalesforceService] Song updated successfully!');
+      return { success: true };
+    } catch (error) {
+      console.error('❌ [SalesforceService] updateWorshipSong Error:', error);
       throw error;
     }
   }
