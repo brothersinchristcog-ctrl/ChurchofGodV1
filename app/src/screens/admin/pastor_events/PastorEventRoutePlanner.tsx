@@ -84,22 +84,25 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
       const geoData = await geoResp.json();
       if (geoData.status === 'OK' && geoData.results.length > 0) {
         const { lat, lng } = geoData.results[0].geometry.location;
+        const formattedName = geoData.results[0].formatted_address || newAddress;
         setCurrentLoc({ lat, lng });
+        setCurrentLocName(formattedName);
         
         // Save back for persistence across app
-        await saveStartingLocation({ name: newAddress, lat, lng });
+        await saveStartingLocation({ name: formattedName, lat, lng });
+      } else {
+        alert('Could not locate that address. Please try again.');
       }
     } catch (e) {
       console.log('Geocoding failed');
+      alert('Network error while geocoding.');
     } finally {
       setIsGeocoding(false);
     }
   };
 
+  // Generate stops (runs instantly on currentLocName or events change)
   useEffect(() => {
-    const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || '';
-    
-    // Generate stops list
     const generatedStops: RouteStop[] = [
       { label: currentLocName, sublabel: 'Starting Point', isHome: true }
     ];
@@ -111,6 +114,12 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
       });
     });
     setStops(generatedStops);
+  }, [currentLocName, sortedEvents]);
+
+  // Calculate distances (runs only when mode, events, or currentLoc changes)
+  useEffect(() => {
+    let isActive = true;
+    const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || '';
 
     const calculateDistances = async () => {
       const generatedLegs: RouteLeg[] = [];
@@ -172,13 +181,18 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
         });
       }
 
-      setLegs(generatedLegs);
-      setConflicts(detectConflicts(sortedEvents, generatedLegs));
+      if (isActive) {
+        setLegs(generatedLegs);
+        setConflicts(detectConflicts(sortedEvents, generatedLegs));
+      }
     };
 
     calculateDistances();
 
-  }, [mode, events, currentLoc, currentLocName]);
+    return () => {
+      isActive = false;
+    };
+  }, [mode, events, currentLoc]); // removed currentLocName so typing doesn't trigger API calls
 
   const handleLaunchGoogleMaps = () => {
     // Collect coordinates for the route

@@ -173,7 +173,7 @@ export const PastorEventDetail = ({ route, navigation }: { route: any; navigatio
                   title: 'Deleted',
                   message: 'Event has been deleted.',
                   type: 'success',
-                  buttons: [{ text: 'OK', onPress: () => { closeAlert(); navigation.navigate('Dashboard'); } }]
+                  buttons: [{ text: 'OK', onPress: () => { closeAlert(); navigation.navigate('AdminRoot'); } }]
                 });
               }, 300);
             } catch (err: any) {

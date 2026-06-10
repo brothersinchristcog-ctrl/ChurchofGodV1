@@ -1736,10 +1736,10 @@ spfkUchVp71l4aWpCW50lro=
 
   async getPastorEvents(): Promise<any[]> {
     try {
-      const soql = `SELECT Id, Subject, StartDateTime, EndDateTime, Description, Location, Type, Address__c FROM Event WHERE StartDateTime >= 2026-01-01T00:00:00Z ORDER BY StartDateTime ASC LIMIT 200`;
+      const soql = `SELECT Id, Subject, StartDateTime, EndDateTime, Description, Location, Address__c FROM Event WHERE StartDateTime >= 2026-01-01T00:00:00Z ORDER BY StartDateTime ASC LIMIT 200`;
       const result = await this.query(soql, true).catch(async () => {
         // Fallback: Address__c might not exist yet
-        const fallbackSoql = `SELECT Id, Subject, StartDateTime, EndDateTime, Description, Location, Type FROM Event WHERE StartDateTime >= 2026-01-01T00:00:00Z ORDER BY StartDateTime ASC LIMIT 200`;
+        const fallbackSoql = `SELECT Id, Subject, StartDateTime, EndDateTime, Description, Location FROM Event WHERE StartDateTime >= 2026-01-01T00:00:00Z ORDER BY StartDateTime ASC LIMIT 200`;
         return await this.query(fallbackSoql);
       });
       const records = result.records || [];
@@ -1857,13 +1857,18 @@ spfkUchVp71l4aWpCW50lro=
         body: JSON.stringify(eventData)
       });
       if (!response.ok) {
-        const data = await response.json();
-        console.error('❌ [SalesforceService] createPastorEvent Error response:', JSON.stringify(data));
-        // Throw the actual Salesforce error so the UI can display it
-        const sfMessage = Array.isArray(data)
-          ? data.map((e: any) => e.message).join('\n')
-          : data?.message || JSON.stringify(data);
-        throw new Error(`Salesforce: ${sfMessage}`);
+        let sfMessage = `Salesforce Error: ${response.status} ${response.statusText}`;
+        try {
+          const text = await response.text();
+          if (text) {
+            const data = JSON.parse(text);
+            sfMessage = Array.isArray(data)
+              ? data.map((e: any) => e.message).join('\n')
+              : data?.message || JSON.stringify(data);
+          }
+        } catch (err) {}
+        console.error('❌ [SalesforceService] createPastorEvent Error response:', sfMessage);
+        throw new Error(sfMessage);
       }
       console.log('✅ [createPastorEvent] Event created successfully');
       return true;
@@ -1885,12 +1890,18 @@ spfkUchVp71l4aWpCW50lro=
         body: JSON.stringify(eventData)
       });
       if (!response.ok) {
-        const data = await response.json();
-        console.error('❌ [SalesforceService] updatePastorEvent Error response:', JSON.stringify(data));
-        const sfMessage = Array.isArray(data)
-          ? data.map((e: any) => e.message).join('\n')
-          : data?.message || JSON.stringify(data);
-        throw new Error(`Salesforce: ${sfMessage}`);
+        let sfMessage = `Salesforce Error: ${response.status} ${response.statusText}`;
+        try {
+          const text = await response.text();
+          if (text) {
+            const data = JSON.parse(text);
+            sfMessage = Array.isArray(data)
+              ? data.map((e: any) => e.message).join('\n')
+              : data?.message || JSON.stringify(data);
+          }
+        } catch (err) {}
+        console.error('❌ [SalesforceService] updatePastorEvent Error response:', sfMessage);
+        throw new Error(sfMessage);
       }
       console.log('✅ [updatePastorEvent] Event updated successfully');
       return true;
@@ -1911,12 +1922,18 @@ spfkUchVp71l4aWpCW50lro=
         }
       });
       if (!response.ok) {
-        const data = await response.json();
-        console.error('❌ [SalesforceService] deletePastorEvent Error response:', JSON.stringify(data));
-        const sfMessage = Array.isArray(data)
-          ? data.map((e: any) => e.message).join('\n')
-          : data?.message || JSON.stringify(data);
-        throw new Error(`Salesforce: ${sfMessage}`);
+        let sfMessage = `Salesforce Error: ${response.status} ${response.statusText}`;
+        try {
+          const text = await response.text();
+          if (text) {
+            const data = JSON.parse(text);
+            sfMessage = Array.isArray(data)
+              ? data.map((e: any) => e.message).join('\n')
+              : data?.message || JSON.stringify(data);
+          }
+        } catch (err) {}
+        console.error('❌ [SalesforceService] deletePastorEvent Error response:', sfMessage);
+        throw new Error(sfMessage);
       }
       console.log('✅ [deletePastorEvent] Event deleted successfully');
       return true;
