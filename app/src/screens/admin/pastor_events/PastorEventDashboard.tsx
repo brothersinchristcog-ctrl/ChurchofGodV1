@@ -184,7 +184,7 @@ export const PastorEventDashboard = ({ navigation }: { navigation: any }) => {
               isFirstEvent: i === 0,
               distKm: km,
               car: mins,
-              bike: Math.round(mins * 2), // Rough approximation
+              bike: Math.round(mins * 0.9), // Motorcycle is slightly faster in traffic
               bus: Math.round(mins * 1.5) // Rough approximation
             };
           }

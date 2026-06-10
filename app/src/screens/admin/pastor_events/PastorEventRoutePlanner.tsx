@@ -169,7 +169,7 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
         if (carMins === 0) carMins = Math.round(distKm * 2); // rough estimate: 2 mins per km
 
         let duration = carMins;
-        if (mode === 'bike') duration = Math.round(carMins * 2.5);
+        if (mode === 'bike') duration = Math.round(carMins * 0.9); // Motorcycle is slightly faster in traffic
         else if (mode === 'bus') duration = Math.round(carMins * 1.5);
 
         generatedLegs.push({
