@@ -4,10 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, radius } from '../theme/Theme';
 
 export const DistanceBadge = ({ distKm, minutes }: { distKm: number; minutes: number }) => (
-  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4,
-                 backgroundColor: colors.primaryLight, borderRadius: radius.sm,
-                 paddingHorizontal: 8, paddingVertical: 4,
-                 borderWidth: 1, borderColor: colors.primary }}>
+  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
     <Ionicons name="location" size={12} color={colors.primary} />
     <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
       {distKm.toFixed(1)} km · {minutes} min
