@@ -185,7 +185,7 @@ export const CreatePastorEvent = ({ route, navigation }: { route: any; navigatio
               title: 'Success',
               message: 'Pastor event updated successfully!',
               type: 'success',
-              buttons: [{ text: 'OK', onPress: () => { closeAlert(); navigation.navigate('AdminRoot'); } }]
+              buttons: [{ text: 'OK', onPress: () => { closeAlert(); navigation.goBack(); } }]
             });
           } else {
             await SalesforceService.createPastorEvent(payload);
@@ -194,7 +194,7 @@ export const CreatePastorEvent = ({ route, navigation }: { route: any; navigatio
               title: 'Success',
               message: 'Pastor event created successfully!',
               type: 'success',
-              buttons: [{ text: 'OK', onPress: () => { closeAlert(); navigation.navigate('AdminRoot'); } }]
+              buttons: [{ text: 'OK', onPress: () => { closeAlert(); navigation.goBack(); } }]
             });
           }
         } catch (e: any) {
