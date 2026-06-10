@@ -7,7 +7,6 @@ import { TransportMode } from '../types/event';
 const modes: { key: TransportMode; icon: string; label: string }[] = [
   { key: 'car',  icon: 'car-outline',         label: 'Car'  },
   { key: 'bike', icon: 'bicycle-outline',      label: 'Bike' },
-  { key: 'walk', icon: 'walk-outline',         label: 'Walk' },
 ];
 
 export const TransportToggle = ({
@@ -23,8 +22,8 @@ export const TransportToggle = ({
           gap: 4, paddingVertical: 8,
           borderRadius: radius.sm,
           borderWidth: 1,
-          borderColor: value === m.key ? colors.primaryMid : colors.border,
-          backgroundColor: value === m.key ? colors.primaryLight : colors.bgPrimary,
+          borderColor: value === m.key ? colors.primary : colors.border,
+          backgroundColor: colors.bgPrimary,
         }}
       >
         <Ionicons name={m.icon as any} size={16}
