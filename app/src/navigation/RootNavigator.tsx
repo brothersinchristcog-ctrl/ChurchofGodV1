@@ -41,6 +41,8 @@ import BiblePlansScreen from '../screens/BiblePlansScreen';
 import MemberNotesScreen from '../screens/MemberNotesScreen';
 import MembersScreen from '../screens/MembersScreen';
 import BibleSearchScreen from '../screens/BibleSearchScreen';
+import AboutUsScreen from '../screens/AboutUsScreen';
+import ContactUsScreen from '../screens/ContactUsScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -410,6 +412,8 @@ function Navigation() {
             <Stack.Screen name="BibleSearch" component={BibleSearchScreen} />
             <Stack.Screen name="MemberNotes" component={MemberNotesScreen} />
             <Stack.Screen name="Members" component={MembersScreen} />
+            <Stack.Screen name="AboutUs" component={AboutUsScreen} />
+            <Stack.Screen name="ContactUs" component={ContactUsScreen} />
           </>
         ) : (
           <Stack.Screen name="Onboarding" component={OnboardingScreen} />

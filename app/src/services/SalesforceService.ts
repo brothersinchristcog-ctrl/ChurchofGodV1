@@ -25,6 +25,7 @@ export interface DailyPromise {
   verseReferenceTe?: string;
   videoTitle?: string;
   duration?: string;
+  imageUrl?: string;
 }
 
 export interface SalesforceMember {
@@ -546,7 +547,7 @@ spfkUchVp71l4aWpCW50lro=
       const result = await this.query(soql, true).catch(async (err) => {
         console.warn('⚠️ Worship_Song__c custom object query failed. Falling back to Sermon__c.');
         // 2. Fail-Safe: Fall back to Sermon__c where name LIKE '%Song%'
-        const fallbackSoql = `SELECT Id, Name, Title_Telugu__c, Description__c, Pastor_Name__c, Scripture_Reference__c, YouTube_ID__c FROM Sermon__c WHERE Status__c = 'Published' AND Name LIKE '%Song%' ORDER BY CreatedDate DESC LIMIT 100`;
+        const fallbackSoql = `SELECT Id, Name, Title_Telugu__c, Description__c, Pastor_Name__c, Scripture_Reference__c, YouTube_ID__c, Category__c FROM Sermon__c WHERE Status__c = 'Published' AND Name LIKE '%Song%' ORDER BY CreatedDate DESC LIMIT 100`;
         const res = await this.query(fallbackSoql, true);
         return {
           records: res.records.map((r: any) => ({
@@ -556,7 +557,8 @@ spfkUchVp71l4aWpCW50lro=
             Lyrics__c: r.Description__c,
             Artist__c: r.Pastor_Name__c,
             Key_Signature__c: r.Scripture_Reference__c,
-            YouTube_ID__c: r.YouTube_ID__c
+            YouTube_ID__c: r.YouTube_ID__c,
+            Category__c: r.Category__c
           }))
         };
       });
@@ -1015,9 +1017,30 @@ spfkUchVp71l4aWpCW50lro=
         const errData = await resp.json();
         throw new Error(errData[0]?.message || 'Failed to save event');
       }
-      console.log(`✅ [SalesforceService] Event ${isUpdate ? 'Updated' : 'Created'} Successfully.`);
     } catch (error) {
       console.error('❌ [SalesforceService] createEvent Error:', error);
+      throw error;
+    }
+  }
+
+  async deleteEvent(id: string) {
+    try {
+      const token = await this.getAccessToken();
+      const url = `${this.instanceUrl}/services/data/v60.0/sobjects/Schedule_Event__c/${id}`;
+
+      const resp = await fetch(url, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json();
+        throw new Error(errData[0]?.message || 'Failed to delete event');
+      }
+      console.log(`✅ [SalesforceService] Event Deleted Successfully.`);
+      return true;
+    } catch (error) {
+      console.error('❌ [SalesforceService] deleteEvent Error:', error);
       throw error;
     }
   }
@@ -1055,10 +1078,9 @@ spfkUchVp71l4aWpCW50lro=
       throw error;
     }
   }
-
-  async getUpcomingEvents(limit = 10): Promise<any[]> {
+  async getTodayEvents(): Promise<any[]> {
     try {
-      const soql = `SELECT Id, Name, Title_Telugu__c, Date__c, Time__c, End_Time__c, Location__c, Description__c, Banner_Image_URL__c, YouTube_ID__c FROM Schedule_Event__c WHERE Date__c >= TODAY ORDER BY Date__c ASC, Time__c ASC LIMIT ${limit}`;
+      const soql = `SELECT Id, Name, Title_Telugu__c, Date__c, Time__c, End_Time__c, Location__c, Location_Telugu__c, Address__c, Description__c, Banner_Image_URL__c, YouTube_ID__c FROM Schedule_Event__c WHERE Date__c = TODAY ORDER BY Time__c ASC`;
       const result = await this.query(soql);
       return result.records.map((rec: any) => ({
         id: rec.Id,
@@ -1068,6 +1090,33 @@ spfkUchVp71l4aWpCW50lro=
         startTime: rec.Time__c,
         endTime: rec.End_Time__c,
         location: rec.Location__c,
+        locationTe: rec.Location_Telugu__c,
+        address: rec.Address__c,
+        description: rec.Description__c,
+        category: 'General',
+        image: rec.Banner_Image_URL__c,
+        youtubeId: this.extractYoutubeId(rec.YouTube_ID__c)
+      }));
+    } catch (error) {
+      console.error('❌ [SalesforceService] getTodayEvents Error:', error);
+      return [];
+    }
+  }
+
+  async getUpcomingEvents(limit = 10): Promise<any[]> {
+    try {
+      const soql = `SELECT Id, Name, Title_Telugu__c, Date__c, Time__c, End_Time__c, Location__c, Location_Telugu__c, Address__c, Description__c, Banner_Image_URL__c, YouTube_ID__c FROM Schedule_Event__c WHERE Date__c >= TODAY ORDER BY Date__c ASC, Time__c ASC LIMIT ${limit}`;
+      const result = await this.query(soql);
+      return result.records.map((rec: any) => ({
+        id: rec.Id,
+        title: rec.Name,
+        titleTelugu: rec.Title_Telugu__c,
+        date: rec.Date__c,
+        startTime: rec.Time__c,
+        endTime: rec.End_Time__c,
+        location: rec.Location__c,
+        locationTe: rec.Location_Telugu__c,
+        address: rec.Address__c,
         description: rec.Description__c,
         category: 'General',
         image: rec.Banner_Image_URL__c,
@@ -1106,7 +1155,7 @@ spfkUchVp71l4aWpCW50lro=
 
   async getDailyPromise(): Promise<DailyPromise | null> {
     try {
-      const soql = `SELECT Id, Promises__c, Promise_text_telugu__c, Date__c, Devotional_Note__c, Pastor_Name__c, YouTube_ID__c, Name, Video_Title__c, Duration__c, Verse_Reference_En__c, Verse_Reference_Te__c FROM Daily_Promises__c WHERE Date__c = TODAY LIMIT 1`;
+      const soql = `SELECT Id, Promises__c, Promise_text_telugu__c, Date__c, Devotional_Note__c, Pastor_Name__c, YouTube_ID__c, Name, Video_Title__c, Duration__c, Verse_Reference_En__c, Verse_Reference_Te__c, Banner_Image_URL__c FROM Daily_Promises__c WHERE Date__c = TODAY LIMIT 1`;
       let result;
       try {
         result = await this.query(soql, true);
@@ -1129,7 +1178,8 @@ spfkUchVp71l4aWpCW50lro=
           verseReferenceEn: rec.Verse_Reference_En__c || rec.Name, // Use Name as fallback for En
           verseReferenceTe: rec.Verse_Reference_Te__c,
           videoTitle: rec.Video_Title__c,
-          duration: rec.Duration__c
+          duration: rec.Duration__c,
+          imageUrl: rec.Banner_Image_URL__c
         };
       }
       return null;
@@ -1146,7 +1196,7 @@ spfkUchVp71l4aWpCW50lro=
   async getDailyPromisesArchive(limit = 30): Promise<DailyPromise[]> {
     try {
       const today = new Date().toISOString().split('T')[0];
-      const soql = `SELECT Id, Promises__c, Promise_text_telugu__c, Date__c, Devotional_Note__c, Pastor_Name__c, YouTube_ID__c, Name, Video_Title__c, Duration__c, Verse_Reference_En__c, Verse_Reference_Te__c FROM Daily_Promises__c WHERE Date__c <= ${today} ORDER BY Date__c DESC LIMIT ${limit}`;
+      const soql = `SELECT Id, Promises__c, Promise_text_telugu__c, Date__c, Devotional_Note__c, Pastor_Name__c, YouTube_ID__c, Name, Video_Title__c, Duration__c, Verse_Reference_En__c, Verse_Reference_Te__c, Banner_Image_URL__c FROM Daily_Promises__c WHERE Date__c <= ${today} ORDER BY Date__c DESC LIMIT ${limit}`;
       const result = await this.query(soql, true);
       return result.records.map((rec: any) => ({
         id: rec.Id,
@@ -1160,7 +1210,8 @@ spfkUchVp71l4aWpCW50lro=
         verseReferenceEn: rec.Verse_Reference_En__c || (rec.Name && !rec.Name.startsWith('DP') ? rec.Name : null),
         verseReferenceTe: rec.Verse_Reference_Te__c,
         videoTitle: rec.Video_Title__c,
-        duration: rec.Duration__c
+        duration: rec.Duration__c,
+        imageUrl: rec.Banner_Image_URL__c
       }));
     } catch (error) {
       console.error('❌ [SalesforceService] getDailyPromisesArchive Error:', error);
@@ -1409,7 +1460,7 @@ spfkUchVp71l4aWpCW50lro=
 
   async getAdminPromises(): Promise<DailyPromise[]> {
     try {
-      let soql = `SELECT Id, Promises__c, Promise_text_telugu__c, Date__c, Status__c, Devotional_Note__c, Pastor_Name__c, YouTube_ID__c, Name, Video_Title__c, Duration__c, Verse_Reference_En__c, Verse_Reference_Te__c FROM Daily_Promises__c ORDER BY Date__c DESC LIMIT 100`;
+      let soql = `SELECT Id, Promises__c, Promise_text_telugu__c, Date__c, Status__c, Devotional_Note__c, Pastor_Name__c, YouTube_ID__c, Name, Video_Title__c, Duration__c, Verse_Reference_En__c, Verse_Reference_Te__c, Banner_Image_URL__c FROM Daily_Promises__c ORDER BY Date__c DESC LIMIT 100`;
       let result;
       try {
         result = await this.query(soql, true);
@@ -1431,7 +1482,8 @@ spfkUchVp71l4aWpCW50lro=
         verseReferenceEn: rec.Verse_Reference_En__c,
         verseReferenceTe: rec.Verse_Reference_Te__c,
         videoTitle: rec.Video_Title__c,
-        duration: rec.Duration__c
+        duration: rec.Duration__c,
+        imageUrl: rec.Banner_Image_URL__c
       }));
     } catch (error) {
       console.error('❌ [SalesforceService] getAdminPromises Failed:', error);
@@ -1457,12 +1509,13 @@ spfkUchVp71l4aWpCW50lro=
         YouTube_ID__c: details.youtubeId,
         Video_Title__c: details.videoTitle,
         Duration__c: details.duration,
-        Status__c: details.status || 'Published'
+        Status__c: details.status || 'Published',
+        Banner_Image_URL__c: details.imageUrl
       };
 
       console.log(`🔗 [SalesforceService] ${isUpdate ? 'PATCH' : 'POST'} to ${url}`);
 
-      const resp = await fetch(url, {
+      let resp = await fetch(url, {
         method: isUpdate ? 'PATCH' : 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -1470,8 +1523,30 @@ spfkUchVp71l4aWpCW50lro=
 
       if (!resp.ok) {
         const errData = await resp.json();
-        console.error('❌ [SalesforceService] Save Failed:', JSON.stringify(errData, null, 2));
-        throw new Error(errData[0]?.message || 'Failed to save promise');
+        const errorMessage = errData[0]?.message || '';
+        
+        if (errorMessage.includes('No such column') || errorMessage.includes('INVALID_FIELD')) {
+          console.warn('⚠️ [SalesforceService] New fields missing, retrying with legacy payload...');
+          const legacyBody = {
+            Date__c: details.date,
+            Promises__c: details.verse,
+            Promise_text_telugu__c: details.verseTelugu,
+            Devotional_Note__c: details.devotionalNote,
+            Pastor_Name__c: details.pastor,
+            YouTube_ID__c: details.youtubeId,
+            Video_Title__c: details.videoTitle,
+            Duration__c: details.duration,
+            Status__c: details.status || 'Published'
+          };
+          resp = await fetch(url, {
+            method: isUpdate ? 'PATCH' : 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(legacyBody)
+          });
+          if (!resp.ok) throw new Error('Legacy save also failed');
+        } else {
+          throw new Error(errorMessage || 'Failed to save promise');
+        }
       }
 
       console.log(`✅ [SalesforceService] Promise ${isUpdate ? 'Updated' : 'Created'} Successfully.`);

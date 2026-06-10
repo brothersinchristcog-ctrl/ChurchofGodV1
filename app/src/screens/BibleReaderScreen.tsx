@@ -612,11 +612,13 @@ const styles = StyleSheet.create({
     fontWeight: '500'
   },
   // Highlighted verse card — gold/amber themed
+  highlightedCard: {
+    marginBottom: 20,
+  },
   highlightedCardLight: {
     backgroundColor: '#fffbeb',
     borderRadius: 16,
     padding: 18,
-    marginBottom: 20,
     marginHorizontal: -4,
     borderWidth: 1.5,
     borderColor: '#fcd34d',
@@ -630,7 +632,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#1c1a00',
     borderRadius: 16,
     padding: 18,
-    marginBottom: 20,
     marginHorizontal: -4,
     borderWidth: 1.5,
     borderColor: 'rgba(253,224,71,0.4)',

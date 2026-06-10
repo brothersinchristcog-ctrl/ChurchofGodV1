@@ -162,7 +162,7 @@ export default function UpdatesScreen({ navigation, route }: any) {
             const isTargeted = data.targetPhone && typeof data.targetPhone === 'string' && data.targetPhone.trim().length > 0;
             if (isTargeted) {
               const uPhone = user?.phoneNumber || '';
-              const mPhone = member?.phone || member?.mobilePhone || '';
+              const mPhone = member?.phone || '';
               const target = data.targetPhone.replace(/\D/g, ''); // strip non-digits for comparison
               
               const match1 = uPhone && uPhone.replace(/\D/g, '').endsWith(target);

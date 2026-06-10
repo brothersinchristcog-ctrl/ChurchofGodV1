@@ -20,6 +20,7 @@ import {
   Search, 
   Calendar as LucideCalendar, 
   ChevronDown, 
+  ChevronLeft,
   FileText,
   Calendar as CalendarIcon,
   Film,
@@ -183,11 +184,14 @@ export default function AdminSermonEditor() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {/* ── Header ── */}
         <View style={styles.header}>
-          <View style={styles.headerTitleRow}>
-            <Plus size={20} color="#c0392b" />
-            <Text style={styles.headerTitle}>Add Sermon</Text>
+          <TouchableOpacity onPress={() => setActiveTab(3)} style={styles.backBtn}>
+            <ChevronLeft size={20} color="#1a2d5a" />
+            <Text style={styles.backBtnTxt}>Sermons</Text>
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>{editingData ? 'Edit Sermon' : 'Add Sermon'}</Text>
+            <Text style={styles.headerSub}>YouTube · Audio · Bilingual</Text>
           </View>
-          <Text style={styles.headerSub}>YouTube · Audio · Bilingual</Text>
         </View>
 
         {/* 1. Sermon Info */}
@@ -466,10 +470,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f2f7' },
   scroll: { padding: 14, paddingBottom: 100 },
 
-  header: { marginBottom: 15, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#c0392b' },
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 15, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#c0392b', gap: 10 },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: '#1a2d5a' },
-  headerSub: { fontSize: 10, color: '#9CA3AF', marginLeft: 28, marginTop: 2 },
+  headerTitle: { fontSize: 17, fontWeight: '800', color: '#1a2d5a' },
+  headerSub: { fontSize: 10, color: '#9CA3AF', marginTop: 2 },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 4, paddingHorizontal: 2 },
+  backBtnTxt: { fontSize: 13, fontWeight: '700', color: '#1a2d5a' },
 
   modBox: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 15, borderWidth: 0.5, borderColor: '#e5e7eb', elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 3 },
   modHd: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14, padding: 10, marginHorizontal: -16, marginTop: -16, borderTopLeftRadius: 12, borderTopRightRadius: 12, borderBottomWidth: 0.5, borderBottomColor: '#e5e7eb' },

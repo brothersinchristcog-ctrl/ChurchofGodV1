@@ -15,7 +15,9 @@ import {
   Menu,
   Users,
   Gift,
-  Smartphone
+  Smartphone,
+  Info,
+  Phone
 } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import Theme from '../theme/Theme';
@@ -35,14 +37,35 @@ import AdminPrayerModeration from '../screens/admin/AdminPrayerModeration';
 import AdminSongEditor from '../screens/admin/AdminSongEditor';
 import AdminMembers from '../screens/admin/AdminMembers';
 import AdminCelebrations from '../screens/admin/AdminCelebrations';
+import AdminAboutUsEditor from '../screens/admin/AdminAboutUsEditor';
+import AdminContactUsEditor from '../screens/admin/AdminContactUsEditor';
 
 const { width } = Dimensions.get('window');
 
 export default function AdminNavigator() {
   const { signOut, user, member, setViewMode } = useAuth();
   const [activeTab, setActiveTab] = useState(0);
+  const [tabHistory, setTabHistory] = useState<number[]>([]);
   const [editingData, setEditingData] = useState(null);
   const [menuExpanded, setMenuExpanded] = useState(false);
+
+  const handleSetTab = (index: number) => {
+    if (index !== activeTab) {
+      setTabHistory(prev => [...prev, activeTab]);
+      setActiveTab(index);
+    }
+  };
+
+  const handleBack = () => {
+    if (tabHistory.length > 0) {
+      const prevTab = tabHistory[tabHistory.length - 1];
+      setTabHistory(prev => prev.slice(0, -1));
+      setActiveTab(prevTab);
+    } else {
+      // Optional: Navigate to home/member view if history is empty?
+      // setViewMode('member');
+    }
+  };
 
   const tabs = [
     { name: 'Promises', icon: BookOpen, component: AdminPromiseList },
@@ -57,19 +80,23 @@ export default function AdminNavigator() {
     { name: 'Prayers', icon: Heart, component: AdminPrayerModeration },
     { name: 'Members', icon: Users, component: AdminMembers },
     { name: 'Celebrations', icon: Gift, component: AdminCelebrations },
+    { name: 'About Us', icon: Info, component: AdminAboutUsEditor },
+    { name: 'Contact Us', icon: Phone, component: AdminContactUsEditor },
     { name: 'App Preview', icon: Eye, component: AdminAppPreview },
   ];
 
   const ActiveComponent = tabs[activeTab].component;
 
+  // We provide handleSetTab via setActiveTab so child components can push to history
   return (
-    <AdminTabContext.Provider value={{ activeTab, setActiveTab, editingData, setEditingData }}>
+    <AdminTabContext.Provider value={{ activeTab, setActiveTab: handleSetTab, editingData, setEditingData, goBack: handleBack }}>
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <TouchableOpacity onPress={() => setMenuExpanded(true)} style={styles.hamburgerBtn}>
               <Menu color="#fff" size={26} />
             </TouchableOpacity>
+            {/* Back button removed from global header — handled per editor screen */}
             <View style={styles.logoCircle}>
               <Image 
                 source={require('../../assets/logo.png')} 
@@ -123,9 +150,9 @@ export default function AdminNavigator() {
                         key={index} 
                         style={[styles.drawerItem, isActive && styles.drawerItemActive]}
                         onPress={() => {
-                          setActiveTab(index);
+                          handleSetTab(index);
                           setMenuExpanded(false); // Hide remaining tabs
-                          if ([1, 4, 5, 8].indexOf(index) === -1) setEditingData(null); 
+                          if ([1, 4, 5, 8].indexOf(index) === -1) setEditingData(null);
                         }}
                       >
                         <tab.icon 

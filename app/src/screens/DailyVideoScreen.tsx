@@ -41,9 +41,9 @@ export default function DailyVideoScreen({ navigation, route }: any) {
       const data: SalesforceVideo[] = promiseData
         .filter(p => p.youtubeId)
         .map(p => ({
-          id: p.id,
+          id: p.id || '',
           title: p.videoTitle || "Today's Devotional",
-          youtubeId: p.youtubeId,
+          youtubeId: p.youtubeId || '',
           date: p.date,
           duration: p.duration || '',
           pastor: p.pastor || 'Brother Y. Rajesh'

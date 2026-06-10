@@ -29,6 +29,7 @@ import {
   Eye,
   Save,
   ChevronDown,
+  ChevronLeft,
   Info,
   CheckCircle2,
   ArrowLeft
@@ -500,7 +501,11 @@ export default function AdminEventEditor() {
 
       {/* ── Page Header ── */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>+ Create Event</Text>
+        <TouchableOpacity onPress={() => setActiveTab(7)} style={styles.backBtn}>
+          <ChevronLeft size={20} color="#1a2d5a" />
+          <Text style={styles.backBtnTxt}>Events</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{editingData ? 'Edit Event' : '+ Create Event'}</Text>
         <Text style={styles.headerSub}>English + Telugu · RSVP enabled</Text>
       </View>
 
@@ -948,9 +953,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   scroll: { paddingBottom: 40 },
 
-  header: { padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: '#1a2d5a' },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9', gap: 10 },
+  headerTitle: { fontSize: 17, fontWeight: '800', color: '#1a2d5a', flex: 1 },
   headerSub: { fontSize: 11, color: '#64748b', marginTop: 2 },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 4, paddingHorizontal: 2 },
+  backBtnTxt: { fontSize: 13, fontWeight: '700', color: '#1a2d5a' },
 
   sectionHeader: { flexDirection: 'row', alignItems: 'center', padding: 10, paddingHorizontal: 20, marginTop: 15, marginBottom: 15 },
   sectionHeaderText: { fontSize: 12, fontWeight: '800', marginLeft: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
@@ -1031,8 +1038,7 @@ const styles = StyleSheet.create({
   publishBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
   draftBtn: { backgroundColor: '#1a2d5a', height: 50, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
   draftBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  backBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  backBtnTxt: { fontSize: 13, fontWeight: '600', color: '#1a2d5a' },
+
 
   fab: { position: 'absolute', right: 20, bottom: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#c0392b', justifyContent: 'center', alignItems: 'center', elevation: 8, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 10 },
 

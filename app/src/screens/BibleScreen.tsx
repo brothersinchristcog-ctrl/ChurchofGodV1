@@ -84,11 +84,11 @@ export default function BibleScreen({ navigation }: any) {
       const isEnglishQuery = /[a-zA-Z]/.test(searchQuery);
       if (isEnglishQuery) {
         try {
-          const transResponse = await fetch(`https://inputtools.google.com/request?text=${encodeURIComponent(searchQuery)}&itc=te-t-i0-und&num=5`);
+          const transResponse = await fetch(`https://inputtools.google.com/request?text=${encodeURIComponent(searchQuery)}&itc=te-t-i0-und&num=6`);
           if (transResponse.ok) {
             const transData = await transResponse.json();
-            const suggestionsList = transData?.[1]?.[0]?.[1] || [];
-            setSuggestions(suggestionsList);
+            const suggestionsList: string[] = transData?.[1]?.[0]?.[1] || [];
+            setSuggestions(suggestionsList.slice(0, 6));
           }
         } catch (e) {
           // silently ignore suggestion fetch errors
@@ -231,38 +231,46 @@ export default function BibleScreen({ navigation }: any) {
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Modern Premium Search Input */}
-      <View style={[styles.searchBarContainer, { backgroundColor: isDark ? '#1e293b' : '#fff' }]}>
-        <Search size={20} color={isDark ? '#94a3b8' : '#64748b'} style={styles.searchBarIcon} />
-        <TextInput
-          placeholder={lang === 'English' ? "Reference search (e.g. John 3:16)..." : "రెఫరెన్స్ వెతకండి (ఉదా: యోహాను 3:16)..."}
-          placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
-          style={[styles.searchBarInput, { color: isDark ? '#fff' : '#0f172a' }]}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          autoCorrect={false}
-          autoCapitalize="none"
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchBarClear}>
-            <Text style={styles.searchBarClearTxt}>×</Text>
-          </TouchableOpacity>
+      {/* Search Input + Dropdown Suggestions Wrapper */}
+      <View style={{ marginHorizontal: 20, zIndex: 200 }}>
+        <View style={[styles.searchBarContainer, { backgroundColor: isDark ? '#1e293b' : '#fff', marginHorizontal: 0 }]}>
+          <Search size={20} color={isDark ? '#94a3b8' : '#64748b'} style={styles.searchBarIcon} />
+          <TextInput
+            placeholder={lang === 'English' ? "Reference search (e.g. John 3:16)..." : "రెఫరెన్స్ వెతకండి (ఉదా: యోహాను 3:16)..."}
+            placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
+            style={[styles.searchBarInput, { color: isDark ? '#fff' : '#0f172a' }]}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCorrect={false}
+            autoCapitalize="none"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => { setSearchQuery(''); setSuggestions([]); }} style={styles.searchBarClear}>
+              <Text style={styles.searchBarClearTxt}>×</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Dropdown Suggestions */}
+        {suggestions.length > 0 && (
+          <View style={[styles.suggestionDropdown, { backgroundColor: isDark ? '#1e293b' : '#fff' }]}>
+            {suggestions.map((sugg, idx) => (
+              <TouchableOpacity
+                key={idx}
+                style={[
+                  styles.suggestionItem,
+                  { borderBottomColor: isDark ? '#334155' : '#f1f5f9' },
+                  idx === suggestions.length - 1 && { borderBottomWidth: 0 }
+                ]}
+                onPress={() => { setSearchQuery(sugg); setSuggestions([]); }}
+              >
+                <Search size={14} color={isDark ? '#64748b' : '#94a3b8'} style={{ marginRight: 10 }} />
+                <Text style={[styles.suggestionItemTxt, { color: isDark ? '#f1f5f9' : '#0f172a' }]}>{sugg}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         )}
       </View>
-
-      {/* Suggestions */}
-      {suggestions.length > 0 && (
-        <View style={{ marginHorizontal: 20, marginBottom: 15 }}>
-          <TouchableOpacity 
-            style={[{ paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, alignItems: 'center' }, { backgroundColor: isDark ? '#334155' : '#e2e8f0' }]} 
-            onPress={() => { setSearchQuery(suggestions[0]); setSuggestions([]); }}
-          >
-            <Text style={[styles.suggestionTxt, { color: isDark ? '#f8fafc' : '#0f172a' }]}>
-              {lang === 'English' ? 'Translate to Telugu: ' : ''}{suggestions[0]}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
 
       {/* Language Toggle */}
       <View style={styles.toggleContainer}>
@@ -665,5 +673,34 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     marginTop: 2
-  }
+  },
+
+  suggestionDropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    zIndex: 999,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  suggestionItemTxt: {
+    fontSize: 16,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
 });

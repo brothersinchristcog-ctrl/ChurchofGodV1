@@ -10,8 +10,9 @@ import {
   StatusBar,
   Image
 } from 'react-native';
-import { MapPin, Clock, Calendar } from 'lucide-react-native';
+import { MapPin, Clock, Calendar, Trash2 } from 'lucide-react-native';
 import { AdminTabContext } from '../../context/AdminTabContext';
+import { Alert } from 'react-native';
 
 import SalesforceService from '../../services/SalesforceService';
 
@@ -81,6 +82,30 @@ export default function AdminEventList() {
     setActiveTab(8); // Switch to Event Editor tab
   };
 
+  const handleDelete = (id: string, name: string) => {
+    Alert.alert(
+      'Delete Event',
+      `Are you sure you want to delete "${name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await SalesforceService.deleteEvent(id);
+              await fetchEvents();
+            } catch (err) {
+              Alert.alert('Error', 'Failed to delete event');
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   if (loading && events.length === 0) {
     return (
       <View style={styles.loadingContainer}>
@@ -132,14 +157,14 @@ export default function AdminEventList() {
         {events
           .filter(e => e.date >= today)
           .map((event, idx) => (
-          <TouchableOpacity key={event.id} style={[styles.eventItem, idx === 0 && styles.featuredItem]} onPress={() => handleEdit(event)}>
-            <View style={[styles.eiThumb, { backgroundColor: event.bannerColor || '#1a2d5a' }]}>
+          <View key={event.id} style={[styles.eventItem, idx === 0 && styles.featuredItem]}>
+            <TouchableOpacity style={[styles.eiThumb, { backgroundColor: event.bannerColor || '#1a2d5a' }]} onPress={() => handleEdit(event)}>
               {event.bannerUrl ? (
                 <Image source={{ uri: event.bannerUrl }} style={styles.eiThumbImg} resizeMode="cover" />
               ) : (
                 <Text style={styles.eiThumbTxt}>IMG</Text>
               )}
-            </View>
+            </TouchableOpacity>
             <View style={styles.eiBody}>
               <Text style={styles.eiTitle} numberOfLines={1}>{event.name || 'No Title'}</Text>
               <Text style={styles.eiTe} numberOfLines={1}>{event.titleTe || ''}</Text>
@@ -163,10 +188,15 @@ export default function AdminEventList() {
                     {(event.status || 'Published').toUpperCase()}
                   </Text>
                 </View>
+                <TouchableOpacity onPress={() => handleDelete(event.id, event.name)} style={{ padding: 4 }}>
+                  <Trash2 size={16} color="#ef4444" />
+                </TouchableOpacity>
               </View>
-              <Text style={styles.eiEdit}>Edit →</Text>
+              <TouchableOpacity onPress={() => handleEdit(event)} style={styles.eiEdit}>
+                <Text style={{ color: '#1a2d5a', fontSize: 10, fontWeight: '800' }}>Edit →</Text>
+              </TouchableOpacity>
             </View>
-          </TouchableOpacity>
+          </View>
         ))}
 
         <View style={{ height: 40 }} />
@@ -204,7 +234,7 @@ const styles = StyleSheet.create({
   eiMetaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   eiMetaTxt: { fontSize: 10, color: '#6B7280', marginLeft: 4 },
   eiFoot: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, flexWrap: 'wrap', gap: 4 },
-  eiEdit: { color: '#1a2d5a', fontSize: 10, fontWeight: '800', position: 'absolute', top: 12, right: 12, backgroundColor: '#f1f5f9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, overflow: 'hidden' },
+  eiEdit: { position: 'absolute', top: 12, right: 12, backgroundColor: '#f1f5f9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, overflow: 'hidden' },
 
   badgePub: { backgroundColor: '#DCFCE7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
   badgePubTxt: { color: '#166534', fontSize: 9, fontWeight: '800' },

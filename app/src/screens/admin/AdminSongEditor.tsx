@@ -306,12 +306,14 @@ export default function AdminSongEditor() {
   // ── MEMBER VIEW UI ────────────────────────────────
   const renderMemberView = () => {
     const browseSongs = memberSongs.filter(s => {
-      if (s.category === 'Theme Songs') return false;
+      const cats = (s.category || 'Other').split(';').map(c => c.trim()).filter(Boolean);
+      if (cats.length === 1 && cats[0] === 'Theme Songs') return false;
       const q = memberSearch.toLowerCase().trim();
       return !q || s.title.toLowerCase().includes(q) || (s.titleTe && s.titleTe.toLowerCase().includes(q));
     });
     const themeSongs = memberSongs.filter(s => {
-      if (s.category !== 'Theme Songs') return false;
+      const cats = (s.category || 'Other').split(';').map(c => c.trim()).filter(Boolean);
+      if (!cats.includes('Theme Songs')) return false;
       const q = memberSearch.toLowerCase().trim();
       return !q || s.title.toLowerCase().includes(q) || (s.titleTe && s.titleTe.toLowerCase().includes(q));
     });

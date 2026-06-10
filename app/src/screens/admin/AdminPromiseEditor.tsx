@@ -11,7 +11,8 @@ import {
   Dimensions,
   Alert,
   Modal,
-  Share
+  Share,
+  Image
 } from 'react-native';
 import { 
   Calendar as CalendarIcon, 
@@ -29,7 +30,10 @@ import {
 } from 'lucide-react-native';
 import { AdminTabContext } from '../../context/AdminTabContext';
 import * as MediaLibrary from 'expo-media-library';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { captureRef } from 'react-native-view-shot';
+import firestore from '@react-native-firebase/firestore';
 
 import SalesforceService from '../../services/SalesforceService';
 
@@ -73,7 +77,8 @@ export default function AdminPromiseEditor() {
     duration: '',
     pastor: '',
     status: 'Scheduled',
-    theme: '#1a2d5a'
+    theme: '#1a2d5a',
+    imageUrl: ''
   });
 
   const stripHtml = (html?: string) => {
@@ -99,7 +104,8 @@ export default function AdminPromiseEditor() {
         duration: editingData.duration || '',
         pastor: editingData.pastor || '',
         status: editingData.status || 'Scheduled',
-        theme: editingData.theme || '#1a2d5a'
+        theme: editingData.theme || '#1a2d5a',
+        imageUrl: editingData.imageUrl || ''
       });
     } else {
       // Reset for NEW promise
@@ -116,7 +122,8 @@ export default function AdminPromiseEditor() {
         duration: '',
         pastor: '',
         status: 'Scheduled',
-        theme: '#1a2d5a'
+        theme: '#1a2d5a',
+        imageUrl: ''
       });
     }
   }, [editingData]);
@@ -163,6 +170,39 @@ export default function AdminPromiseEditor() {
     }
   };
 
+  const uploadImageToCloud = async (localUri: string): Promise<string> => {
+    const filename = localUri.split('/').pop() || `promise_${Date.now()}.jpg`;
+    const base64Data = await FileSystem.readAsStringAsync(localUri, { encoding: 'base64' });
+    const { functions } = require('../../services/firebaseConfig');
+    const uploadFunc = functions().httpsCallable('uploadEventImage');
+    const response = await uploadFunc({ image: base64Data, fileName: filename });
+    if (response.data?.success && response.data?.url) return response.data.url;
+    throw new Error('Cloud upload failed');
+  };
+
+  const pickThumbnail = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images',
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        setLoading(true);
+        const cloudUrl = await uploadImageToCloud(result.assets[0].uri);
+        setForm(prev => ({ ...prev, imageUrl: cloudUrl }));
+        Alert.alert('Success', 'Thumbnail uploaded to cloud successfully! Remember to Save Changes.');
+      }
+    } catch (err) {
+      console.error('Upload Error:', err);
+      Alert.alert('Upload Failed', 'There was an issue uploading your image.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSave = async (statusOverride?: string) => {
     const finalStatus = statusOverride || form.status;
     
@@ -173,7 +213,7 @@ export default function AdminPromiseEditor() {
 
     setLoading(true);
     try {
-      const payload = {
+      const details = {
         id: editingData?.id,
         date: form.date,
         verse: form.enVerse,
@@ -186,10 +226,12 @@ export default function AdminPromiseEditor() {
         duration: form.duration,
         pastor: form.pastor,
         status: finalStatus,
-        theme: form.theme
+        theme: form.theme,
+        imageUrl: form.imageUrl
       };
       
-      await SalesforceService.createDailyPromise(payload);
+      await SalesforceService.createDailyPromise(details);
+
       setShowSuccess(true);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to save to Salesforce. Please check your connection.');
@@ -242,11 +284,14 @@ export default function AdminPromiseEditor() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headerTitleRow}>
-            <Text style={styles.headerIcon}>✏️</Text>
-            <Text style={styles.headerTitle}>Create Promise</Text>
+          <TouchableOpacity onPress={() => setActiveTab(0)} style={styles.backBtn}>
+            <ChevronLeft size={20} color="#1a2d5a" />
+            <Text style={styles.backBtnTxt}>Promises</Text>
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>{editingData ? 'Edit Promise' : 'Create Promise'}</Text>
+            <Text style={styles.headerSub}>Bilingual · English + Telugu</Text>
           </View>
-          <Text style={styles.headerSub}>Bilingual · English + Telugu</Text>
         </View>
 
         {/* 1. Schedule */}
@@ -313,6 +358,29 @@ export default function AdminPromiseEditor() {
           <View style={styles.fGroup}>
             <Text style={styles.fLabel}>Devotional note — Telugu <Text style={styles.fHint}>ఐచ్ఛికం</Text></Text>
             <TextInput style={[styles.input, styles.textarea, styles.teIn]} multiline value={form.teNote} onChangeText={(v) => setForm({...form, teNote: v})} placeholder="పాస్టర్ గారి వ్యాఖ్యానం తెలుగులో…" />
+          </View>
+        </View>
+
+        {/* 3.5 Thumbnail Upload */}
+        <View style={[styles.section, { backgroundColor: '#F3F4F6', borderLeftColor: '#4B5563' }]}>
+          <View style={styles.secHd}>
+            <Eye size={14} color="#4B5563" />
+            <Text style={[styles.secHdTXT, {color: '#4B5563'}]}>Daily Promise Thumbnail</Text>
+          </View>
+          <View style={styles.fGroup}>
+            <Text style={styles.fLabel}>Upload Thumbnail Image <Text style={styles.fHint}>(Visible on member home screen)</Text></Text>
+            {form.imageUrl ? (
+              <View style={styles.thumbnailPreviewContainer}>
+                <Image source={{ uri: form.imageUrl }} style={styles.thumbnailImg} resizeMode="cover" />
+                <TouchableOpacity style={styles.removeThumbnailBtn} onPress={() => setForm(prev => ({ ...prev, imageUrl: '' }))}>
+                  <Text style={styles.btnChangeThumbTxt}>Remove Image</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.btnUploadThumb} onPress={pickThumbnail}>
+                <Text style={styles.btnUploadThumbTxt}>Pick Image from Gallery</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -460,11 +528,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f2f7' },
   scroll: { padding: 14, paddingBottom: 100 },
 
-  header: { marginBottom: 15, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#c0392b' },
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 15, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#c0392b', gap: 10 },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerIcon: { fontSize: 18 },
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#1a2d5a' },
-  headerSub: { fontSize: 10, color: '#6B7280', marginLeft: 28 },
+  headerSub: { fontSize: 10, color: '#6B7280' },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 4, paddingHorizontal: 2 },
+  backBtnTxt: { fontSize: 13, fontWeight: '700', color: '#1a2d5a' },
 
   section: { borderRadius: 12, padding: 14, marginBottom: 15, borderWidth: 0.5, borderColor: '#e5e7eb', borderLeftWidth: 4 },
   secNavy: { backgroundColor: '#EFF6FF', borderLeftColor: '#1a2d5a' },
@@ -487,9 +557,9 @@ const styles = StyleSheet.create({
   textarea: { minHeight: 70, textAlignVertical: 'top' },
   teIn: { fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif', color: '#1a2d5a', fontStyle: 'italic' },
 
-  themeRow: { flexDirection: 'row', marginTop: 5 },
-  themeChip: { width: 34, height: 34, borderRadius: 17, borderWidth: 2, borderColor: 'transparent', marginRight: 10 },
-  themeActive: { borderColor: '#111827' },
+  themeRow: { flexDirection: 'row', marginTop: 8, gap: 10 },
+  themeChip: { width: 36, height: 36, borderRadius: 18, borderWidth: 3, borderColor: 'transparent' },
+  themeActive: { borderColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 4, elevation: 6 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   pickerCard: { backgroundColor: '#fff', width: '85%', borderRadius: 20, padding: 20, elevation: 10 },
@@ -539,6 +609,15 @@ const styles = StyleSheet.create({
   btnDraftTxt: { color: '#fff', fontSize: 13, fontWeight: '700' },
   btnBack: { alignItems: 'center' },
   btnBackTxt: { fontSize: 12, color: '#374151', fontWeight: '600' },
+
+  btnUploadThumb: { backgroundColor: '#E5E7EB', borderRadius: 8, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#D1D5DB', borderStyle: 'dashed' },
+  btnUploadThumbTxt: { color: '#4B5563', fontSize: 13, fontWeight: '600' },
+  thumbContainer: { flexDirection: 'row', alignItems: 'center', gap: 15 },
+  thumbnailPreviewContainer: { flexDirection: 'row', alignItems: 'center', gap: 15, marginTop: 10 },
+  thumbnailImg: { width: 80, height: 80, borderRadius: 8, backgroundColor: '#d1d5db' },
+  btnChangeThumb: { backgroundColor: '#1a2d5a', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6 },
+  removeThumbnailBtn: { backgroundColor: '#c0392b', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6 },
+  btnChangeThumbTxt: { color: '#fff', fontSize: 12, fontWeight: '600' },
 
   fab: { position: 'absolute', right: 20, bottom: 30, width: 56, height: 56, borderRadius: 28, backgroundColor: '#c0392b', justifyContent: 'center', alignItems: 'center', elevation: 8, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8 }
 });

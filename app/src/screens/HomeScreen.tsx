@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { 
   StyleSheet, 
   View, 
@@ -12,10 +12,11 @@ import {
   Alert,
   StatusBar,
   Platform,
-  ImageBackground,
   Share,
   Modal,
-  Linking
+  Linking,
+  Animated,
+  Easing
 } from 'react-native';
 import { 
   Bell, 
@@ -40,8 +41,11 @@ import {
   FileText,
   X,
   Phone,
-  Mail
+  Mail,
+  Info
 } from 'lucide-react-native';
+
+import firestore from '@react-native-firebase/firestore';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import Theme from '../theme/Theme';
@@ -65,12 +69,150 @@ const stripHtml = (html: string | undefined): string => {
 
 import { useTheme } from '../context/ThemeContext';
 
+const EventMarquee = ({ events, onEventPress }: { events: any[], onEventPress: (event: any) => void }) => {
+  const [contentWidth, setContentWidth] = useState(0);
+  const scrollAnim = React.useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (contentWidth > 0) {
+      scrollAnim.setValue(width);
+      Animated.loop(
+        Animated.timing(scrollAnim, {
+          toValue: -contentWidth,
+          duration: (contentWidth + width) * 35, // Faster scroll speed
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      ).start();
+    }
+  }, [contentWidth]);
+
+  if (!events || events.length === 0) return null;
+
+  const formatTimeStr = (timeStr: string, lang: 'en' | 'te' = 'en') => {
+    if (!timeStr) return '';
+    try {
+      const timePart = timeStr.includes('T') ? timeStr.split('T')[1].split('.')[0] : timeStr;
+      const [hours, minutes] = timePart.split(':');
+      const h = parseInt(hours);
+      const ampmEn = h >= 12 ? 'PM' : 'AM';
+      
+      let ampmTe = '';
+      if (h < 12) ampmTe = 'ఉదయం'; // Morning
+      else if (h < 16) ampmTe = 'మధ్యాహ్నం'; // Afternoon
+      else if (h < 20) ampmTe = 'సాయంత్రం'; // Evening
+      else ampmTe = 'రాత్రి'; // Night
+
+      const formattedHours = h % 12 || 12;
+      
+      if (lang === 'te') {
+        return `${ampmTe} ${formattedHours}:${minutes}`;
+      }
+      return `${formattedHours}:${minutes} ${ampmEn}`;
+    } catch (e) {
+      return timeStr;
+    }
+  };
+
+  const getEventStatus = (event: ScheduleEvent) => {
+    const today = new Date();
+    const dateParts = (event.date || '').split('-');
+    const eventYear = parseInt(dateParts[0]) || today.getFullYear();
+    const eventMonth = parseInt(dateParts[1]) - 1 || 0;
+    const eventDay = parseInt(dateParts[2]) || today.getDate();
+
+    const parseTime = (timeStr: string) => {
+      if (!timeStr) return null;
+      const timePart = timeStr.includes('T') ? timeStr.split('T')[1] : timeStr;
+      const [h, m, s] = timePart.split(':').map(Number);
+      return new Date(eventYear, eventMonth, eventDay, h || 0, m || 0, s || 0);
+    };
+
+    const startDt = parseTime(event.startTime);
+    const endDt = parseTime(event.endTime);
+
+    if (!startDt) {
+      const eventDate = new Date(eventYear, eventMonth, eventDay, 23, 59, 59);
+      return today > eventDate ? 'completed' : 'upcoming';
+    }
+
+    if (today < startDt) return 'upcoming';
+    if (endDt && today > endDt) return 'completed';
+    return 'live';
+  };
+
+  const hasLiveEvents = events.some(ev => getEventStatus(ev) === 'live');
+
+  return (
+    <View style={styles.marqueeWrapper}>
+      {/* Header row */}
+      <View style={styles.marqueeTitleRow}>
+        <Text style={styles.marqueeTitleEmoji}>🎉</Text>
+        <Text style={styles.marqueeTitleText}>TODAY'S EVENTS  •  నేటి కార్యక్రమాలు</Text>
+      </View>
+      {/* Scrolling ticker */}
+      <View style={styles.marqueeTicker}>
+        <View style={[styles.marqueeTickerBadge, hasLiveEvents && { backgroundColor: '#dc2626' }]}>
+          <Text style={styles.marqueeTickerBadgeTxt}>{hasLiveEvents ? 'LIVE' : 'TODAY'}</Text>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} scrollEnabled={false} style={styles.marqueeContent}>
+          <Animated.View
+            style={{ flexDirection: 'row', alignItems: 'center', paddingRight: width, transform: [{ translateX: scrollAnim }] }}
+            onLayout={(e) => setContentWidth(e.nativeEvent.layout.width)}
+          >
+            {events.map((ev, index) => {
+              const status = getEventStatus(ev);
+              const isLive = status === 'live';
+              return (
+              <TouchableOpacity
+                key={ev.id || index}
+                style={styles.marqueeItem}
+                onPress={() => {
+                  if (isLive && ev.liveUrl) {
+                    Linking.openURL(ev.liveUrl);
+                  } else {
+                    onEventPress(ev);
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                {/* English block */}
+                <View style={[styles.marqueeEventDot, isLive && { backgroundColor: '#dc2626' }]} />
+                <Text style={styles.marqueeItemTitle}>{ev.title}</Text>
+                <View style={styles.marqueeTimePill}>
+                  <Text style={styles.marqueeItemTime}>
+                    ⏰ {formatTimeStr(ev.startTime, 'en')}{ev.endTime ? ` - ${formatTimeStr(ev.endTime, 'en')}` : ''}
+                  </Text>
+                </View>
+
+                {/* Telugu block — always shown, with fallbacks */}
+                <Text style={styles.marqueeLangDivider}>  |  </Text>
+                <View style={[styles.marqueeEventDotTe, isLive && { backgroundColor: '#dc2626' }]} />
+                <Text style={styles.marqueeItemTitleTe}>{ev.titleTelugu || ev.title}</Text>
+                <View style={styles.marqueeTimePillTe}>
+                  <Text style={styles.marqueeItemTimeTe}>
+                    ⏰ {formatTimeStr(ev.startTime, 'te')}{ev.endTime ? ` - ${formatTimeStr(ev.endTime, 'te')}` : ''}
+                  </Text>
+                </View>
+
+                <Text style={styles.marqueeSeparator}>    ✦    </Text>
+              </TouchableOpacity>
+              );
+            })}
+          </Animated.View>
+        </ScrollView>
+      </View>
+    </View>
+  );
+};
+
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
   const { user, signOut } = useAuth();
   const { mode, isDark, toggleTheme, colors } = useTheme();
   const [member, setMember] = useState<SalesforceMember | null>(null);
   const [promise, setPromise] = useState<DailyPromise | null>(null);
+  const [todayEvents, setTodayEvents] = useState<ScheduleEvent[]>([]);
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
   const [latestSermon, setLatestSermon] = useState<Sermon | null>(null);
   const [latestPrayer, setLatestPrayer] = useState<any | null>(null);
@@ -78,19 +220,25 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const [promiseThumbnail, setPromiseThumbnail] = useState<string | null>(null);
+  const [carouselSlide, setCarouselSlide] = useState(0); // 0 = text, 1 = image
+  const carouselScrollRef = useRef<ScrollView>(null);
+
   const fetchData = async () => {
     try {
       // Run ALL Salesforce calls in parallel for maximum speed
-      const [memberResult, promiseResult, eventsResult, sermonsResult, prayersResult] = await Promise.allSettled([
+      const [memberResult, promiseResult, todayEventsResult, upcomingEventsResult, sermonsResult, prayersResult] = await Promise.allSettled([
         // 1. Fetch Member Details
         user?.phoneNumber ? SalesforceService.checkContactExists(user.phoneNumber) : Promise.resolve(null),
         // 2. Fetch Daily Promise
         SalesforceService.getDailyPromise(),
-        // 3. Fetch Upcoming Events
+        // 3. Fetch Today's Events
+        SalesforceService.getTodayEvents(),
+        // 4. Fetch Upcoming Events
         SalesforceService.getUpcomingEvents(3),
-        // 4. Fetch Latest Sermon
+        // 5. Fetch Latest Sermon
         SalesforceService.getSermons(1),
-        // 5. Fetch Latest Prayer
+        // 6. Fetch Latest Prayer
         (async () => {
           if (!user?.phoneNumber) return [];
           const res = await SalesforceService.checkContactExists(user.phoneNumber);
@@ -107,10 +255,19 @@ export default function HomeScreen() {
         SalesforceService.updateLastAppOpened(memberResult.value.member.id);
       }
       if (promiseResult.status === 'fulfilled' && promiseResult.value) {
-        setPromise(promiseResult.value);
+        const prom = promiseResult.value;
+        setPromise(prom);
+        if (prom.imageUrl) {
+          setPromiseThumbnail(prom.imageUrl);
+        } else {
+          setPromiseThumbnail(null);
+        }
       }
-      if (eventsResult.status === 'fulfilled') {
-        setEvents(eventsResult.value || []);
+      if (todayEventsResult.status === 'fulfilled') {
+        setTodayEvents(todayEventsResult.value || []);
+      }
+      if (upcomingEventsResult.status === 'fulfilled') {
+        setEvents(upcomingEventsResult.value || []);
       }
       if (sermonsResult.status === 'fulfilled' && sermonsResult.value?.length > 0) {
         setLatestSermon(sermonsResult.value[0]);
@@ -126,6 +283,29 @@ export default function HomeScreen() {
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [user]);
+
+  // Carousel auto-slide logic
+  useEffect(() => {
+    if (!promiseThumbnail) return;
+    setCarouselSlide(0);
+    const interval = setInterval(() => {
+      setCarouselSlide(prev => {
+        const next = prev === 0 ? 1 : 0;
+        carouselScrollRef.current?.scrollTo({ x: next * (width - 32), animated: true });
+        return next;
+      });
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [promiseThumbnail]);
+
+  const goToSlide = (idx: number) => {
+    setCarouselSlide(idx);
+    carouselScrollRef.current?.scrollTo({ x: idx * (width - 32), animated: true });
   };
 
   const handleOpenMembers = () => {
@@ -152,10 +332,6 @@ export default function HomeScreen() {
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, [user]);
-
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
@@ -168,15 +344,6 @@ export default function HomeScreen() {
     return 'Good evening';
   };
 
-  const formatEventDate = (dateStr: string) => {
-    if (!dateStr) return { day: '--', month: '---' };
-    const d = new Date(dateStr);
-    return {
-      day: d.getDate().toString(),
-      month: d.toLocaleString('en-US', { month: 'short' }).toUpperCase(),
-    };
-  };
-
   const getTeluguDay = () => {
     const days = ['ఆదివారం', 'సోమవారం', 'మంగళవారం', 'బుధవారం', 'గురువారం', 'శుక్రవారం', 'శనివారం'];
     return days[new Date().getDay()];
@@ -185,7 +352,6 @@ export default function HomeScreen() {
   const formatTime = (timeStr: string) => {
     if (!timeStr) return '--:--';
     try {
-      // Handles formats like '21:00:00.000Z' or '09:30:00'
       const timePart = timeStr.includes('T') ? timeStr.split('T')[1].split('.')[0] : timeStr;
       const [hours, minutes] = timePart.split(':');
       const h = parseInt(hours);
@@ -208,22 +374,6 @@ export default function HomeScreen() {
     }
   };
 
-  const upcomingEvents = events;
-
-  const handleMakeCall = (phoneNumber: string) => {
-    if (!phoneNumber) return;
-    Linking.openURL(`tel:${phoneNumber}`).catch(() => {
-      Alert.alert('Error', 'Unable to initiate phone call.');
-    });
-  };
-
-  const handleSendEmail = (email: string) => {
-    if (!email) return;
-    Linking.openURL(`mailto:${email}`).catch(() => {
-      Alert.alert('Error', 'Unable to open email client.');
-    });
-  };
-
   if (loading && !refreshing) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: '#1a2d5a' }]}>
@@ -237,11 +387,9 @@ export default function HomeScreen() {
     <View style={[styles.mainContainer, { backgroundColor: isDark ? '#0f172a' : '#f8fafc' }]}>
       <StatusBar barStyle="light-content" backgroundColor="#1a2d5a" />
       
-      {/* ── App Header (Updated Layout) ── */}
       <View style={styles.appHeader}>
         <View style={styles.headerTopRow}>
           <View style={styles.headerLeft}>
-            {/* Perfectly circular and centered logo */}
             <View style={styles.logoCircle}>
               <Image 
                 source={require('../../assets/logo.png')} 
@@ -299,40 +447,74 @@ export default function HomeScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a2d5a" />
         }
       >
+        <EventMarquee events={todayEvents} onEventPress={(event) => navigation.navigate('EventDetails', { event })} />
         <View style={styles.contentPad}>
-          {/* ── Promise Hero Card (Improved Ref Logic) ── */}
+          {/* ── Daily Promise Carousel ── */}
           <View style={styles.promiseHero}>
-            <View style={styles.phInner}>
-              <Text style={styles.phLabel}>TODAY'S PROMISE · ఈ రోజు వాగ్దానం</Text>
-              <Text style={styles.phEn}>{promise ? `"${stripHtml(promise.verse)}"` : ''}</Text>
-              <Text style={styles.phRefEn}>{promise ? `— ${promise.verseReferenceEn || promise.verseReference}` : ''}</Text>
-              
-              <View style={styles.phDivider} />
-
-              <Text style={styles.phTe}>{promise?.verseTelugu ? `"${stripHtml(promise.verseTelugu)}"` : ''}</Text>
-              <Text style={styles.phRefTe}>{promise?.verseReferenceTe ? `— ${promise.verseReferenceTe}` : ''}</Text>
-              
-              <View style={styles.phActions}>
-                <TouchableOpacity style={styles.phShareBtn} onPress={handleSharePromise}>
-                  <Share2 size={18} color="#fff" />
-                  <Text style={styles.phBtnTxt}>Share</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.phWatchBtn} 
-                  onPress={() => navigation.navigate('DailyVideo', { 
-                    youtubeId: promise?.youtubeId,
-                    videoTitle: promise?.videoTitle,
-                    pastor: promise?.pastor
-                  })}
-                >
-                  <Play size={18} color="#fff" fill="#fff" />
-                  <Text style={styles.phBtnTxt}>Watch video</Text>
-                </TouchableOpacity>
+            {/* Slides */}
+            <ScrollView
+              ref={carouselScrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              scrollEventThrottle={16}
+              onMomentumScrollEnd={(e) => {
+                const slide = Math.round(e.nativeEvent.contentOffset.x / (width - 32));
+                setCarouselSlide(slide);
+              }}
+              style={{ borderRadius: 20 }}
+            >
+              {/* Slide 1 — Promise Text */}
+              <View style={[styles.phSlide, styles.phInner]}>
+                <Text style={styles.phLabel}>TODAY'S PROMISE · ఈ రోజు వాగ్దానం</Text>
+                <Text style={styles.phEn}>{promise ? `"${stripHtml(promise.verse)}"` : ''}</Text>
+                <Text style={styles.phRefEn}>{promise ? `— ${promise.verseReferenceEn || promise.verseReference}` : ''}</Text>
+                <View style={styles.phDivider} />
+                <Text style={styles.phTe}>{promise?.verseTelugu ? `"${stripHtml(promise.verseTelugu)}"` : ''}</Text>
+                <Text style={styles.phRefTe}>{promise?.verseReferenceTe ? `— ${promise.verseReferenceTe}` : ''}</Text>
+                <View style={styles.phActions}>
+                  <TouchableOpacity style={styles.phShareBtn} onPress={handleSharePromise}>
+                    <Share2 size={18} color="#fff" />
+                    <Text style={styles.phBtnTxt}>Share</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.phWatchBtn} 
+                    onPress={() => navigation.navigate('DailyVideo', { 
+                      youtubeId: promise?.youtubeId,
+                      videoTitle: promise?.videoTitle,
+                      pastor: promise?.pastor
+                    })}
+                  >
+                    <Play size={18} color="#fff" fill="#fff" />
+                    <Text style={styles.phBtnTxt}>Watch video</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
+
+              {/* Slide 2 — Thumbnail (only if image exists) */}
+              {promiseThumbnail && (
+                <View style={[styles.phSlide, styles.phThumbnailSlide]}>
+                  <Image
+                    source={{ uri: promiseThumbnail }}
+                    style={styles.phThumbnailImg}
+                    resizeMode="cover"
+                  />
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Dot Indicators (only shown when thumbnail exists) */}
+            {promiseThumbnail && (
+              <View style={styles.dotRow}>
+                {[0, 1].map(i => (
+                  <TouchableOpacity key={i} onPress={() => goToSlide(i)} style={styles.dotHit}>
+                    <View style={[styles.dot, carouselSlide === i && styles.dotActive]} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
 
-          {/* ── Quick Access Grid ── */}
           <Text style={styles.secLbl}>QUICK ACCESS</Text>
           <View style={styles.iconGrid}>
             <GridItem icon={<Mic size={26} color="#fff" />} label="Sermons" color="#1a2d5a" onPress={() => navigation.navigate('Sermons')} />
@@ -349,11 +531,11 @@ export default function HomeScreen() {
             <GridItem icon={<YoutubeIcon size={26} color="#fff" />} label="YouTube Live" color="#ef4444" onPress={() => Linking.openURL('https://www.youtube.com/@Brothersinchristfellowship/live')} />
             <GridItem icon={<Users size={26} color="#fff" />} label="Members" color="#db2777" onPress={handleOpenMembers} />
             <GridItem icon={<Sun size={26} color="#fff" />} label="Devotion" color="#b45309" onPress={() => Alert.alert('Daily Devotion', 'Devotion feeds coming soon!')} />
+            <GridItem icon={<Info size={26} color="#fff" />} label="About Us" color="#1a2d5a" onPress={() => navigation.navigate('AboutUs')} />
+            <GridItem icon={<Phone size={26} color="#fff" />} label="Contact Us" color="#0F766E" onPress={() => navigation.navigate('ContactUs')} />
             <GridItem icon={<MoreHorizontal size={26} color="#fff" />} label="More" color="#64748b" onPress={() => Alert.alert('More Features', 'More features coming soon!')} />
           </View>
 
-          {/* ── Next Event Banner (Always Visible) ── */}
-          {/* ── Upcoming Events Card (Sermon Style) ── */}
           <View style={styles.eventBanner}>
             <View style={styles.ebHd}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -366,8 +548,8 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.ebList}>
-              {upcomingEvents.length > 0 ? (
-                upcomingEvents.map((item: any, index: number) => (
+              {events.length > 0 ? (
+                events.map((item: any, index: number) => (
                   <View key={item.id}>
                     <TouchableOpacity 
                       style={styles.ebItem} 
@@ -409,7 +591,7 @@ export default function HomeScreen() {
                         <Text style={styles.ebDetailsLink}>Details →</Text>
                       </View>
                     </TouchableOpacity>
-                    {index < upcomingEvents.length - 1 && <View style={styles.ebDivider} />}
+                    {index < events.length - 1 && <View style={styles.ebDivider} />}
                   </View>
                 ))
               ) : (
@@ -422,7 +604,6 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* ── Latest Sermon Card ── */}
           <View style={styles.sermonCard}>
             <View style={styles.scHd}>
               <View style={styles.scHdLblRow}>
@@ -451,7 +632,6 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* ── Prayer Preview ── */}
           <View style={[styles.prayerCard, { marginBottom: 40 }]}>
             <View style={styles.pcHd}>
               <View style={styles.pcHdLblRow}>
@@ -477,8 +657,6 @@ export default function HomeScreen() {
           </View>
         </View>
       </ScrollView>
-
-
     </View>
   );
 }
@@ -497,13 +675,11 @@ function GridItem({ icon, label, color, onPress }: { icon: any; label: string; c
 const styles = StyleSheet.create({
   mainContainer: { flex: 1, backgroundColor: '#f8fafc', paddingBottom: 120 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a2d5a' },
-  loadingText: { color: '#fbbf24', marginTop: 15, fontSize: 14, fontWeight: '600' },
   screenLoadingText: { color: '#FCD34D', marginTop: 15, fontSize: 14, fontWeight: '700' },
   
   scroll: { flex: 1 },
   contentPad: { paddingBottom: 20 },
   
-  // Header
   appHeader: {
     backgroundColor: '#1a2d5a',
     paddingTop: Platform.OS === 'ios' ? 60 : 45,
@@ -512,19 +688,9 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
   },
-  headerTopRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    marginBottom: 15,
-    justifyContent: 'space-between' 
-  },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15, justifyContent: 'space-between' },
   headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  logoCircle: { 
-    width: 46, height: 46, backgroundColor: '#fff', 
-    borderRadius: 23, justifyContent: 'center', alignItems: 'center',
-    elevation: 4, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 4,
-    overflow: 'hidden'
-  },
+  logoCircle: { width: 46, height: 46, backgroundColor: '#fff', borderRadius: 23, justifyContent: 'center', alignItems: 'center', elevation: 4, overflow: 'hidden' },
   logoImg: { width: 46, height: 46, borderRadius: 23 },
   titleCol: { marginLeft: 10 },
   hdTitle: { color: '#FCD34D', fontSize: 16, fontWeight: '800', letterSpacing: 0.2 },
@@ -532,55 +698,198 @@ const styles = StyleSheet.create({
   
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   actionIconButton: { padding: 4, position: 'relative' },
-  themeIconWrap: { 
-    width: 36, height: 36, borderRadius: 18, 
-    backgroundColor: 'rgba(255,255,255,0.1)', 
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)'
-  },
-  notifBadge: { 
-    position: 'absolute', top: 4, right: 4, width: 8, height: 8, 
-    backgroundColor: '#ef4444', borderRadius: 4, borderWidth: 1.5, borderColor: '#1a2d5a' 
-  },
+  themeIconWrap: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
+  notifBadge: { position: 'absolute', top: 4, right: 4, width: 8, height: 8, backgroundColor: '#ef4444', borderRadius: 4, borderWidth: 1.5, borderColor: '#1a2d5a' },
   avatarWrapper: { width: 38, height: 38, position: 'relative' },
   avatarImg: { width: 38, height: 38, borderRadius: 19, borderWidth: 1.5, borderColor: '#FCD34D' },
-  avatarPlaceholder: { 
-    width: 38, height: 38, borderRadius: 19, backgroundColor: '#1e293b', 
-    justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#FCD34D' 
-  },
+  avatarPlaceholder: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#1e293b', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#FCD34D' },
   avatarLetter: { color: '#FCD34D', fontWeight: '800', fontSize: 14 },
-  onlineBadge: { 
-    position: 'absolute', bottom: 0, right: 0, width: 10, height: 10, 
-    borderRadius: 5, backgroundColor: '#22c55e', borderWidth: 1.5, borderColor: '#1a2d5a' 
-  },
+  onlineBadge: { position: 'absolute', bottom: 0, right: 0, width: 10, height: 10, borderRadius: 5, backgroundColor: '#22c55e', borderWidth: 1.5, borderColor: '#1a2d5a' },
   
   greetingSection: { marginTop: 10 },
   greetingText: { color: '#fff', fontSize: 17, fontWeight: '600', marginBottom: 2 },
-  userNameGold: { 
-    color: '#FCD34D', 
-    fontWeight: '800', 
-    textShadowColor: 'rgba(0,0,0,0.3)', 
-    textShadowOffset: { width: 0.5, height: 0.5 }, 
-    textShadowRadius: 1 
-  },
+  userNameGold: { color: '#FCD34D', fontWeight: '800' },
   dateText: { color: '#aac4e8', fontSize: 12, fontWeight: '500' },
 
-  // Promise Hero
   promiseHero: {
-    backgroundColor: '#1a2d5a', margin: 16, borderRadius: 20, overflow: 'hidden',
-    marginTop: 20, elevation: 8, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 10
+    marginHorizontal: 16,
+    marginTop: 20,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#1a2d5a',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
   },
-  phInner: { padding: 20 },
-  phLabel: { fontSize: 11, color: '#FCD34D', fontWeight: '700', letterSpacing: 1, marginBottom: 12 },
+  phSlide: {
+    width: width - 32,
+    borderRadius: 20,
+  },
+  phInner: {
+    backgroundColor: '#1a2d5a',
+    borderRadius: 20,
+    padding: 24,
+  },
+  phThumbnailSlide: {
+    width: width - 32,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#1a2d5a',
+    justifyContent: 'center',
+  },
+  phThumbnailImg: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: 20,
+  },
+  // Dot indicators
+  dotRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 10,
+    backgroundColor: '#1a2d5a',
+    gap: 8,
+  },
+  dotHit: { padding: 4 },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+  },
+  dotActive: {
+    width: 22,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FCD34D',
+  },
+  phLabel: {
+    color: '#FCD34D',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
   phEn: { color: '#fff', fontSize: 15, fontWeight: '600', fontStyle: 'italic', lineHeight: 24, marginBottom: 4 },
   phRefEn: { color: '#FCD34D', fontSize: 12, fontWeight: '700', marginBottom: 15, textAlign: 'right' },
   phDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginBottom: 15 },
-  phTe: { color: '#aac4e8', fontSize: 16, fontStyle: 'italic', lineHeight: 26, marginBottom: 4 },
+  phTe: { color: '#fff', fontSize: 16, fontStyle: 'italic', lineHeight: 26, marginBottom: 4 },
   phRefTe: { color: '#FCD34D', fontSize: 13, fontWeight: '700', marginBottom: 20, textAlign: 'right' },
   phActions: { flexDirection: 'row', gap: 12 },
   phShareBtn: { flex: 1, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, paddingVertical: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   phWatchBtn: { flex: 1, backgroundColor: '#c0392b', borderRadius: 12, paddingVertical: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   phBtnTxt: { color: '#fff', fontSize: 13, fontWeight: '700' },
+
+  marqueeWrapper: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#0f1e3d',
+    borderWidth: 1,
+    borderColor: 'rgba(252,211,77,0.2)',
+  },
+  marqueeTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    backgroundColor: '#1a2d5a',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(252,211,77,0.25)',
+    gap: 8,
+  },
+  marqueeTitleEmoji: { fontSize: 16 },
+  marqueeTitleText: {
+    color: '#FCD34D',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    flex: 1,
+  },
+  marqueeTicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    overflow: 'hidden',
+  },
+  marqueeTickerBadge: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginHorizontal: 10,
+    borderRadius: 5,
+  },
+  marqueeTickerBadgeTxt: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  marqueeContent: { flex: 1, overflow: 'hidden' },
+  marqueeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 4,
+  },
+  marqueeEventDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#FCD34D',
+    marginRight: 8,
+  },
+  marqueeItemTitle: {
+    color: '#ffffff',
+    fontSize: 13.5,
+    fontWeight: '800',
+  },
+  marqueeItemTitleTe: {
+    color: '#FCD34D',
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 2,
+  },
+  marqueeTimePill: {
+    backgroundColor: 'rgba(252,211,77,0.15)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginLeft: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(252,211,77,0.4)',
+  },
+  marqueeItemTime: { color: '#FCD34D', fontSize: 12, fontWeight: '800' },
+  marqueeItemLoc: {
+    color: '#94a3b8',
+    fontSize: 11.5,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  marqueeSeparator: { color: 'rgba(252,211,77,0.35)', fontSize: 12, marginHorizontal: 4 },
+  marqueeLangDivider: { color: 'rgba(255,255,255,0.25)', fontSize: 14, fontWeight: '300', marginHorizontal: 6 },
+  marqueeEventDotTe: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#FCD34D',
+    marginRight: 8,
+  },
+  marqueeTimePillTe: {
+    backgroundColor: 'rgba(252,211,77,0.15)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginLeft: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(252,211,77,0.4)',
+  },
+  marqueeItemTimeTe: { color: '#FCD34D', fontSize: 12, fontWeight: '800' },
+  marqueeItemLocTe: { color: '#94a3b8', fontSize: 11.5, fontWeight: '500', marginLeft: 8 },
 
   // Event Banner (Sermon Style)
   eventBanner: { margin: 16, marginTop: 4, backgroundColor: '#fff', borderRadius: 18, overflow: 'hidden', elevation: 4, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 6, borderWidth: 1, borderColor: '#f1f5f9' },
