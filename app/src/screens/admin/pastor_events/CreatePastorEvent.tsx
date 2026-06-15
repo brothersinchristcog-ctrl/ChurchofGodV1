@@ -265,7 +265,7 @@ export const CreatePastorEvent = ({ route, navigation }: { route: any; navigatio
                     setAlertConfig({
                       visible: true,
                       title: 'Schedule Conflict',
-                      message: `Insufficient travel time between your previous stop (${prevEvent.title}) and this new location.\n\nEstimated travel time is ${travelTimeMins >= 60 ? `${Math.round(travelTimeMins / 60 * 10) / 10} hours` : `${travelTimeMins} minutes`}.`,
+                      message: `Insufficient travel time between ${prevEvent.venue || prevEvent.title} and ${venue.trim() || 'this new location'}.\n\nEstimated travel time is ${travelTimeMins >= 60 ? `${Math.round(travelTimeMins / 60 * 10) / 10} hours` : `${travelTimeMins} minutes`}.`,
                       type: 'warning',
                       buttons: [
                         { text: 'Cancel', style: 'cancel', onPress: () => { setLoading(false); closeAlert(); } },

@@ -26,7 +26,7 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
   const [stops, setStops] = useState<RouteStop[]>([]);
   const [legs, setLegs] = useState<RouteLeg[]>([]);
   const [conflicts, setConflicts] = useState<{ message: string }[]>([]);
-  const [currentLocName, setCurrentLocName] = useState('Guntur, AP');
+  const [currentLocName, setCurrentLocName] = useState('');
   const [currentLoc, setCurrentLoc] = useState<{lat: number, lng: number} | null>(null);
   const [isGeocoding, setIsGeocoding] = useState(false);
 
@@ -275,7 +275,7 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
 
         <View style={{ backgroundColor: '#fff', padding: spacing.md, borderRadius: radius.md, marginBottom: spacing.md, elevation: 2 }}>
           <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 8 }}>
-            STARTING FROM
+            HOME
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <TextInput

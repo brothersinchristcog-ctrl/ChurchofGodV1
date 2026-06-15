@@ -21,9 +21,12 @@ export interface PastorEvent {
   section:      'today' | 'upcoming' | 'past';
   travel: {
     isFirstEvent?: boolean;
+    prevVenueName?: string;
     distKm:  number;
     car:     number;             // minutes
     bike:    number;
     bus:     number;
+    homeDistKm?: number;
+    homeCar?: number;
   };
 }

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-  FlatList,
+  ScrollView,
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
@@ -109,8 +109,27 @@ export const PastorEventDashboard = ({ navigation }: { navigation: any }) => {
   });
 
   const [dynamicStats, setDynamicStats] = useState({ km: 0, mins: 0, loading: false });
-  const [currentLocName, setCurrentLocName] = useState('Guntur, AP');
+  const [currentLocName, setCurrentLocName] = useState('');
   const [isGeocoding, setIsGeocoding] = useState(false);
+
+  const getShortVenueName = (venue?: string) => {
+    if (!venue) return 'DEST';
+    const parts = venue.split(',');
+    const name = parts.length > 1 ? parts[1].trim() : parts[0].trim();
+    return name.substring(0, 10).toUpperCase();
+  };
+
+  const formatCardDate = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr);
+      const d = date.getDate().toString().padStart(2, '0');
+      const m = date.toLocaleString('default', { month: 'short' }); 
+      const y = date.getFullYear();
+      return `${d} ${m}, ${y}`;
+    } catch {
+      return dateStr;
+    }
+  };
 
   useEffect(() => {
     const calcStats = async () => {
@@ -182,11 +201,45 @@ export const PastorEventDashboard = ({ navigation }: { navigation: any }) => {
             
             evt.travel = {
               isFirstEvent: i === 0,
+              prevVenueName: i === 0 ? "HOME" : (filteredEvents[i-1].venue ? getShortVenueName(filteredEvents[i-1].venue) : 'PREV'),
               distKm: km,
               car: mins,
               bike: Math.round(mins * 0.9), // Motorcycle is slightly faster in traffic
               bus: Math.round(mins * 1.5) // Rough approximation
             };
+
+            // Calculate home to event distance if it's not the first event
+            if (i > 0) {
+              const homeOriginStr = `${prevLat},${prevLng}`;
+              const homeCacheKey = `dist_${homeOriginStr}_${destStr}`;
+              let homeDistanceValue = 0;
+              let homeDurationValue = 0;
+              
+              try {
+                const cached = await AsyncStorage.getItem(homeCacheKey);
+                if (cached) {
+                  const parsed = JSON.parse(cached);
+                  homeDistanceValue = parsed.distance;
+                  homeDurationValue = parsed.duration;
+                }
+              } catch (e) {}
+
+              if (homeDistanceValue === 0) {
+                const distResp = await fetch(`https://maps.googleapis.com/maps/api/distancematrix/json?origins=${homeOriginStr}&destinations=${destStr}&key=${GOOGLE_KEY}`);
+                const distData = await distResp.json();
+                if (distData.status === 'OK' && distData.rows[0].elements[0].status === 'OK') {
+                  const element = distData.rows[0].elements[0];
+                  homeDistanceValue = element.distance.value;
+                  homeDurationValue = element.duration.value;
+                  try {
+                    await AsyncStorage.setItem(homeCacheKey, JSON.stringify({ distance: homeDistanceValue, duration: homeDurationValue }));
+                  } catch (e) {}
+                }
+              }
+              
+              evt.travel.homeDistKm = homeDistanceValue / 1000;
+              evt.travel.homeCar = Math.round(homeDurationValue / 60);
+            }
           }
         }
         setDynamicStats({ km: totalKm, mins: totalMins, loading: false });
@@ -238,10 +291,10 @@ export const PastorEventDashboard = ({ navigation }: { navigation: any }) => {
     >
       <Text style={[styles.titleText, { marginBottom: 12 }]}>{item.title}</Text>
       
-      <View style={{ gap: 6, marginBottom: 8 }}>
+      <View style={{ gap: 6, marginBottom: 16 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Ionicons name="calendar-outline" size={14} color={colors.primary} />
-          <Text style={[styles.timeText, { marginLeft: 6 }]}>{item.date.split('-').reverse().join('-')}</Text>
+          <Text style={[styles.timeText, { marginLeft: 6 }]}>{formatCardDate(item.date)}</Text>
         </View>
 
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -253,37 +306,88 @@ export const PastorEventDashboard = ({ navigation }: { navigation: any }) => {
 
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Ionicons name="hourglass-outline" size={14} color={colors.primary} />
-          <Text style={[styles.timeText, { marginLeft: 6, color: colors.textTertiary }]}>
+          <Text style={[styles.timeText, { marginLeft: 6, color: '#374151' }]}>
             Meeting length: {item.durationMins >= 60 ? `${Math.round(item.durationMins / 60 * 10) / 10} hours` : `${item.durationMins} mins`}
           </Text>
         </View>
       </View>
       
-      <View style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'center',
-        backgroundColor: colors.bgPrimary,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: radius.md,
-        borderWidth: 1,
-        borderColor: colors.primary,
-        marginTop: 8
-      }}>
-        <Ionicons name="location-outline" size={16} color={colors.primary} />
-        <Text style={{ marginLeft: 6, fontSize: 13, fontWeight: '600', color: colors.primary }} numberOfLines={1}>
-          {item.venue && item.venue !== item.address ? `${item.venue} - ${item.address}` : item.address || item.venue || 'No location provided'}
-        </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EEF2FF', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginBottom: 6 }}>
+        <Ionicons name="location" size={12} color={colors.primary} />
+        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary, marginLeft: 4, letterSpacing: 0.5 }}>VENUE & LOCATION</Text>
       </View>
+      <Text style={styles.venueTitle}>{item.venue || 'No Venue'}</Text>
+      <Text style={styles.addressText}>{item.address || item.venue || 'No location provided'}</Text>
+
+      <TouchableOpacity 
+        style={styles.mapsButtonOutline} 
+        onPress={() => {
+          import('../../../utils/maps').then(m => m.openInMaps(item.lat || 0, item.lng || 0, item.title, item.address || item.venue));
+        }}>
+        <Ionicons name="navigate-outline" size={16} color={colors.primaryDark} />
+        <Text style={styles.mapsButtonOutlineText}>Get Directions</Text>
+      </TouchableOpacity>
 
       {item.travel && item.travel.distKm > 0 && (
-        <View style={styles.travelContainer}>
-          <Text style={styles.travelLabel}>
-            {item.travel.isFirstEvent ? 'Travel from Starting Location:' : 'Travel from previous stop:'}
-          </Text>
-          <DistanceBadge distKm={item.travel.distKm} minutes={item.travel.car} />
-        </View>
+        <>
+          <View style={styles.distanceMiniCard}>
+            <View style={styles.distanceMiniCardEndpoint}>
+              <Ionicons name={item.travel.isFirstEvent ? "home" : "location"} size={20} color={colors.primary} />
+              <Text style={styles.distanceMiniCardEndpointText} numberOfLines={1}>
+                {item.travel.prevVenueName || (item.travel.isFirstEvent ? "HOME" : "PREV")}
+              </Text>
+            </View>
+            
+            <View style={styles.distanceMiniCardCenter}>
+              <View style={styles.distanceMiniCardPill}>
+                <Text style={styles.distanceMiniCardPillText}>
+                  {item.travel.distKm.toFixed(1)} km • {item.travel.car >= 60 ? `${Math.floor(item.travel.car/60)}h ${item.travel.car%60}m` : `${item.travel.car}m`}
+                </Text>
+              </View>
+              <View style={styles.distanceMiniCardLineRow}>
+                <View style={styles.distanceMiniCardLine} />
+                <Ionicons name="car" size={16} color={colors.primary} style={{marginHorizontal: 8}} />
+                <View style={styles.distanceMiniCardLine} />
+              </View>
+            </View>
+
+            <View style={styles.distanceMiniCardEndpoint}>
+              <Ionicons name="location" size={20} color={colors.primary} />
+              <Text style={styles.distanceMiniCardEndpointText} numberOfLines={1}>
+                {getShortVenueName(item.venue)}
+              </Text>
+            </View>
+          </View>
+
+          {!item.travel.isFirstEvent && item.travel.homeDistKm !== undefined && item.travel.homeDistKm > 0 && (
+            <View style={[styles.distanceMiniCard, { marginTop: 8, borderColor: `${colors.primary}30`, backgroundColor: `${colors.primary}05` }]}>
+              <View style={styles.distanceMiniCardEndpoint}>
+                <Ionicons name="home" size={20} color={colors.primary} />
+                <Text style={styles.distanceMiniCardEndpointText} numberOfLines={1}>HOME</Text>
+              </View>
+              
+              <View style={styles.distanceMiniCardCenter}>
+                <View style={styles.distanceMiniCardPill}>
+                  <Text style={styles.distanceMiniCardPillText}>
+                    {item.travel.homeDistKm.toFixed(1)} km • {item.travel.homeCar && item.travel.homeCar >= 60 ? `${Math.floor(item.travel.homeCar/60)}h ${item.travel.homeCar%60}m` : `${item.travel.homeCar}m`}
+                  </Text>
+                </View>
+                <View style={styles.distanceMiniCardLineRow}>
+                  <View style={styles.distanceMiniCardLine} />
+                  <Ionicons name="car" size={16} color={colors.primary} style={{marginHorizontal: 8}} />
+                  <View style={styles.distanceMiniCardLine} />
+                </View>
+              </View>
+
+              <View style={styles.distanceMiniCardEndpoint}>
+                <Ionicons name="location" size={20} color={colors.primary} />
+                <Text style={styles.distanceMiniCardEndpointText} numberOfLines={1}>
+                  {getShortVenueName(item.venue)}
+                </Text>
+              </View>
+            </View>
+          )}
+        </>
       )}
     </TouchableOpacity>
   );
@@ -332,121 +436,125 @@ export const PastorEventDashboard = ({ navigation }: { navigation: any }) => {
         />
       )}
 
-      {/* Tabs */}
-      <View style={styles.tabsContainer}>
-        {(['today', 'upcoming', 'past'] as const).map(tab => (
-          <TouchableOpacity
-            key={tab}
-            style={[
-              styles.tab, 
-              activeTab === tab && !selectedDateFilter && styles.activeTab,
-              selectedDateFilter && styles.disabledTab
-            ]}
-            onPress={() => {
-              setSelectedDateFilter(null);
-              setActiveTab(tab);
-            }}
-            disabled={loading}
-          >
-            <Text style={[styles.tabText, activeTab === tab && !selectedDateFilter && styles.activeTabText]}>
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 140 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+        }
+      >
+        {/* Tabs */}
+        <View style={styles.tabsContainer}>
+          {(['today', 'upcoming', 'past'] as const).map(tab => (
+            <TouchableOpacity
+              key={tab}
+              style={[
+                styles.tab, 
+                activeTab === tab && !selectedDateFilter && styles.activeTab,
+                selectedDateFilter && styles.disabledTab
+              ]}
+              onPress={() => {
+                setSelectedDateFilter(null);
+                setActiveTab(tab);
+              }}
+              disabled={loading}
+            >
+              <Text style={[styles.tabText, activeTab === tab && !selectedDateFilter && styles.activeTabText]}>
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
-      {/* Date Filter Indicator Banner */}
-      {selectedDateFilter && (
-        <View style={styles.filterBanner}>
-          <View style={styles.filterBannerLeft}>
-            <Ionicons name="funnel-outline" size={14} color={colors.primary} />
-            <Text style={styles.filterBannerText}>
-              Filtered: {new Date(selectedDateFilter).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-            </Text>
+        {/* Date Filter Indicator Banner */}
+        {selectedDateFilter && (
+          <View style={styles.filterBanner}>
+            <View style={styles.filterBannerLeft}>
+              <Ionicons name="funnel-outline" size={14} color={colors.primary} />
+              <Text style={styles.filterBannerText}>
+                Filtered: {new Date(selectedDateFilter).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+              </Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.clearFilterButton} 
+              onPress={() => setSelectedDateFilter(null)}
+            >
+              <Text style={styles.clearFilterText}>Show All</Text>
+              <Ionicons name="close-circle" size={16} color={colors.primary} />
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity 
-            style={styles.clearFilterButton} 
-            onPress={() => setSelectedDateFilter(null)}
-          >
-            <Text style={styles.clearFilterText}>Show All</Text>
-            <Ionicons name="close-circle" size={16} color={colors.primary} />
-          </TouchableOpacity>
-        </View>
-      )}
+        )}
 
-      {/* Starting Location Bar */}
-      <View style={{ backgroundColor: '#fff', padding: spacing.md, marginHorizontal: spacing.md, marginBottom: spacing.sm, borderRadius: radius.md, elevation: 1 }}>
-        <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: 4 }}>
-          STARTING FROM
-        </Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TextInput
-            style={{ flex: 1, backgroundColor: colors.bgSecondary, padding: 8, borderRadius: radius.sm, fontSize: 14, color: colors.textPrimary }}
-            value={currentLocName}
-            onChangeText={setCurrentLocName}
-            onEndEditing={(e) => handleAddressSubmit(e.nativeEvent.text)}
-            onSubmitEditing={(e) => handleAddressSubmit(e.nativeEvent.text)}
-            placeholder="Type starting address..."
-            returnKeyType="search"
-          />
-          <TouchableOpacity 
-            style={{ marginLeft: 8, backgroundColor: colors.primary, padding: 8, borderRadius: radius.sm }}
-            onPress={() => handleAddressSubmit(currentLocName)}
-            disabled={isGeocoding}
-          >
-            {isGeocoding ? (
-              <ActivityIndicator size="small" color="#FFF" />
-            ) : (
-              <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12 }}>Update</Text>
-            )}
-          </TouchableOpacity>
+        {/* Starting Location Bar */}
+        <View style={{ backgroundColor: '#fff', padding: spacing.md, marginHorizontal: spacing.md, marginBottom: spacing.sm, borderRadius: radius.md, elevation: 1 }}>
+          <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: 4 }}>
+            HOME
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TextInput
+              style={{ flex: 1, backgroundColor: colors.bgSecondary, padding: 8, borderRadius: radius.sm, fontSize: 14, color: colors.textPrimary }}
+              value={currentLocName}
+              onChangeText={setCurrentLocName}
+              onEndEditing={(e) => handleAddressSubmit(e.nativeEvent.text)}
+              onSubmitEditing={(e) => handleAddressSubmit(e.nativeEvent.text)}
+              placeholder="Type starting address..."
+              returnKeyType="search"
+            />
+            <TouchableOpacity 
+              style={{ marginLeft: 8, backgroundColor: colors.primary, padding: 8, borderRadius: radius.sm }}
+              onPress={() => handleAddressSubmit(currentLocName)}
+              disabled={isGeocoding}
+            >
+              {isGeocoding ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12 }}>Update</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+          <Text style={{ fontSize: 10, color: colors.textTertiary, marginTop: 4 }}>
+            {isGeocoding ? 'Updating...' : 'Press Enter to update distances.'}
+          </Text>
         </View>
-        <Text style={{ fontSize: 10, color: colors.textTertiary, marginTop: 4 }}>
-          {isGeocoding ? 'Updating...' : 'Press Enter to update distances.'}
-        </Text>
-      </View>
 
-      {/* Stats Strip */}
-      <View style={styles.statsStrip}>
-        <View style={styles.statBox}>
-          <Text style={styles.statVal}>{totalEvents}</Text>
-          <Text style={styles.statLbl}>Events</Text>
+        {/* Stats Strip */}
+        <View style={styles.statsStrip}>
+          <View style={styles.statBox}>
+            <Text style={styles.statVal}>{totalEvents}</Text>
+            <Text style={styles.statLbl}>Events</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statBox}>
+            <Text style={styles.statVal}>{Math.round(totalDistance)} km</Text>
+            <Text style={styles.statLbl}>Travel Dist</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statBox}>
+            <Text style={styles.statVal}>{formatDuration(totalTravelTimeCar)}</Text>
+            <Text style={styles.statLbl}>Travel Time</Text>
+          </View>
         </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statBox}>
-          <Text style={styles.statVal}>{Math.round(totalDistance)} km</Text>
-          <Text style={styles.statLbl}>Travel Dist</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statBox}>
-          <Text style={styles.statVal}>{formatDuration(totalTravelTimeCar)}</Text>
-          <Text style={styles.statLbl}>Travel Time</Text>
-        </View>
-      </View>
 
-      {/* List */}
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      ) : filteredEvents.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="calendar-outline" size={64} color={colors.textTertiary} />
-          <Text style={styles.emptyText}>No events found in this section</Text>
-          <Text style={styles.emptySubtext}>Use standard Screen Flows to record new pastor events.</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredEvents}
-          renderItem={renderEventCard}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.listContent}
-          extraData={dynamicStats}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
-          }
-        />
-      )}
+        {/* List */}
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : filteredEvents.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="calendar-outline" size={64} color={colors.textTertiary} />
+            <Text style={styles.emptyText}>No events found in this section</Text>
+            <Text style={styles.emptySubtext}>Use standard Screen Flows to record new pastor events.</Text>
+          </View>
+        ) : (
+          filteredEvents.map(item => (
+            <View key={item.id} style={{ marginHorizontal: spacing.md, marginBottom: spacing.md }}>
+              {renderEventCard({ item })}
+            </View>
+          ))
+        )}
+      </ScrollView>
 
       {/* Floating Buttons */}
       <View style={styles.floatingButtonsContainer}>
@@ -604,22 +712,89 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm
   },
   addressText: {
-    fontSize: 12,
-    color: colors.textTertiary
+    fontSize: 13,
+    color: '#4b5563',
+    lineHeight: 18,
+    marginBottom: spacing.sm
   },
-  travelContainer: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: spacing.sm,
-    marginTop: spacing.xs,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  travelLabel: {
+  cardLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: colors.primary
+    color: '#374151',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: spacing.xs
+  },
+  venueTitle: {
+    ...typography.h3,
+    color: colors.textPrimary,
+    marginBottom: 2
+  },
+  mapsButtonOutline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e6f0ff',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: radius.md,
+    alignSelf: 'flex-start',
+    marginBottom: 8
+  },
+  mapsButtonOutlineText: {
+    color: colors.primaryDark,
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 6
+  },
+  distanceMiniCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.bgPrimary,
+    borderRadius: radius.md,
+    padding: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: colors.border
+  },
+  distanceMiniCardEndpoint: {
+    alignItems: 'center',
+    width: 60
+  },
+  distanceMiniCardEndpointText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.primary,
+    marginTop: 4,
+    textAlign: 'center',
+    textTransform: 'uppercase'
+  },
+  distanceMiniCardCenter: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 12
+  },
+  distanceMiniCardPill: {
+    backgroundColor: '#e6f0ff',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12
+  },
+  distanceMiniCardPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primaryDark
+  },
+  distanceMiniCardLineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginTop: 8
+  },
+  distanceMiniCardLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border
   },
   loadingContainer: {
     flex: 1,
