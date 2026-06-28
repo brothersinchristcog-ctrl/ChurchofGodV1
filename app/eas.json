@@ -21,11 +21,17 @@
     },
     "production": {
       "channel": "production",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyClqd_LjvZZ-TqEEXDL1Q7APvc9svkewRI"
+      }
     },
     "production-apk": {
       "channel": "production",
       "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyClqd_LjvZZ-TqEEXDL1Q7APvc9svkewRI"
+      },
       "android": {
         "buildType": "apk"
       }

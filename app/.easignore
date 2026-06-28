@@ -1,5 +1,4 @@
-android/app/build/
-android/app/.cxx/
-android/.gradle/
 node_modules/
+android/
+ios/
 .expo/

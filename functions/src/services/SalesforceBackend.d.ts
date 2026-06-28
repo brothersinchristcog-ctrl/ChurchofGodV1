@@ -32,9 +32,6 @@ export declare class SalesforceBackend {
      * Fetches Upcoming Events
      */
     getUpcomingEvents(limit?: number): Promise<any>;
-    /**
-     * Verifies if a member exists in the database (Strict Security Gate)
-     */
     checkContact(phone: string): Promise<{
         exists: boolean;
         member: {

@@ -46,3 +46,6 @@ old_HomeScreen.tsx
 ~$*.xlsx
 *.pdf
 offer_letter_template.html
+
+test_sf*.js
+test_phone*.js

@@ -108,36 +108,44 @@ export class SalesforceBackend {
     return result.records;
   }
 
-  /**
-   * Verifies if a member exists in the database (Strict Security Gate)
-   */
   public async checkContact(phone: string) {
-    const tenDigit = phone.slice(-10);
+    const rawDigits = phone.replace(/\D/g, '');
+    const tenDigit = rawDigits.slice(-10);
+    const fourDigit = rawDigits.slice(-4);
+    
     const soql = `SELECT Id, AccountId, FirstName, LastName, Phone, MobilePhone, Email, User_Type__c, CreatedDate, MailingCity, MailingState, MailingStreet 
                   FROM Contact WHERE 
-                  Phone LIKE '%${tenDigit}' OR 
-                  MobilePhone LIKE '%${tenDigit}' 
-                  LIMIT 1`;
+                  Phone LIKE '%${fourDigit}%' OR 
+                  MobilePhone LIKE '%${fourDigit}%' 
+                  LIMIT 50`;
     const result = await this.query(soql);
     if (result.totalSize > 0) {
-      const rec = result.records[0];
-      return { 
-        exists: true, 
-        member: {
-          id: rec.Id,
-          accountId: rec.AccountId,
-          name: `${rec.FirstName || ''} ${rec.LastName || ''}`.trim(),
-          firstName: rec.FirstName,
-          lastName: rec.LastName,
-          email: rec.Email,
-          phone: rec.Phone || rec.MobilePhone,
-          userType: rec.User_Type__c || 'Member',
-          mailingCity: rec.MailingCity,
-          mailingState: rec.MailingState,
-          mailingStreet: rec.MailingStreet,
-          joinDate: rec.CreatedDate
-        }
-      };
+      // Filter in JS to bypass formatting
+      const exactMatch = result.records.find((rec: any) => {
+        const p1 = (rec.Phone || '').replace(/\D/g, '');
+        const p2 = (rec.MobilePhone || '').replace(/\D/g, '');
+        return p1.endsWith(tenDigit) || p2.endsWith(tenDigit);
+      });
+
+      if (exactMatch) {
+        return { 
+          exists: true, 
+          member: {
+            id: exactMatch.Id,
+            accountId: exactMatch.AccountId,
+            name: `${exactMatch.FirstName || ''} ${exactMatch.LastName || ''}`.trim(),
+            firstName: exactMatch.FirstName,
+            lastName: exactMatch.LastName,
+            email: exactMatch.Email,
+            phone: exactMatch.Phone || exactMatch.MobilePhone,
+            userType: exactMatch.User_Type__c || 'Member',
+            mailingCity: exactMatch.MailingCity,
+            mailingState: exactMatch.MailingState,
+            mailingStreet: exactMatch.MailingStreet,
+            joinDate: exactMatch.CreatedDate
+          }
+        };
+      }
     }
     return { exists: false };
   }
