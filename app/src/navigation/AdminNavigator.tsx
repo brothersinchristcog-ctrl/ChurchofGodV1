@@ -14,10 +14,7 @@ import {
   LogOut,
   Menu,
   Users,
-  Gift,
-  Smartphone,
-  Info,
-  Phone
+  Gift
 } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import Theme from '../theme/Theme';
@@ -37,36 +34,15 @@ import AdminPrayerModeration from '../screens/admin/AdminPrayerModeration';
 import AdminSongEditor from '../screens/admin/AdminSongEditor';
 import AdminMembers from '../screens/admin/AdminMembers';
 import AdminCelebrations from '../screens/admin/AdminCelebrations';
-import AdminAboutUsEditor from '../screens/admin/AdminAboutUsEditor';
-import AdminContactUsEditor from '../screens/admin/AdminContactUsEditor';
-import PastorEventDashboard from '../screens/admin/pastor_events/PastorEventDashboard';
+import PastorEventNavigator from './PastorEventNavigator';
 
 const { width } = Dimensions.get('window');
 
-export default function AdminNavigator({ navigation }: any) {
-  const { signOut, user, member, setViewMode } = useAuth();
+export default function AdminNavigator() {
+  const { signOut, user, member } = useAuth();
   const [activeTab, setActiveTab] = useState(0);
-  const [tabHistory, setTabHistory] = useState<number[]>([]);
   const [editingData, setEditingData] = useState(null);
   const [menuExpanded, setMenuExpanded] = useState(false);
-
-  const handleSetTab = (index: number) => {
-    if (index !== activeTab) {
-      setTabHistory(prev => [...prev, activeTab]);
-      setActiveTab(index);
-    }
-  };
-
-  const handleBack = () => {
-    if (tabHistory.length > 0) {
-      const prevTab = tabHistory[tabHistory.length - 1];
-      setTabHistory(prev => prev.slice(0, -1));
-      setActiveTab(prevTab);
-    } else {
-      // Optional: Navigate to home/member view if history is empty?
-      // setViewMode('member');
-    }
-  };
 
   const tabs = [
     { name: 'Promises', icon: BookOpen, component: AdminPromiseList },
@@ -76,29 +52,25 @@ export default function AdminNavigator({ navigation }: any) {
     { name: 'New Sermon', icon: PlusSquare, component: AdminSermonEditor },
     { name: 'New Song', icon: PlusSquare, component: AdminSongEditor },
     { name: 'Notifications', icon: Bell, component: AdminNotificationBroadcast },
+    { name: 'Pastor Events', icon: Calendar, component: PastorEventNavigator },
     { name: 'Events', icon: MapPin, component: AdminEventList },
     { name: 'New Event', icon: PlusSquare, component: AdminEventEditor },
-    { name: 'Pastor Event', icon: MapPin, component: PastorEventDashboard },
     { name: 'Prayers', icon: Heart, component: AdminPrayerModeration },
     { name: 'Members', icon: Users, component: AdminMembers },
     { name: 'Celebrations', icon: Gift, component: AdminCelebrations },
-    { name: 'About Us', icon: Info, component: AdminAboutUsEditor },
-    { name: 'Contact Us', icon: Phone, component: AdminContactUsEditor },
     { name: 'App Preview', icon: Eye, component: AdminAppPreview },
   ];
 
   const ActiveComponent = tabs[activeTab].component;
 
-  // We provide handleSetTab via setActiveTab so child components can push to history
   return (
-    <AdminTabContext.Provider value={{ activeTab, setActiveTab: handleSetTab, editingData, setEditingData, goBack: handleBack }}>
+    <AdminTabContext.Provider value={{ activeTab, setActiveTab, editingData, setEditingData }}>
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <TouchableOpacity onPress={() => setMenuExpanded(true)} style={styles.hamburgerBtn}>
               <Menu color="#fff" size={26} />
             </TouchableOpacity>
-            {/* Back button removed from global header — handled per editor screen */}
             <View style={styles.logoCircle}>
               <Image 
                 source={require('../../assets/logo.png')} 
@@ -117,7 +89,7 @@ export default function AdminNavigator({ navigation }: any) {
         </View>
 
         <View style={styles.content}>
-          <ActiveComponent navigation={navigation} />
+          <ActiveComponent />
         </View>
 
         {/* Full-Height Left Side Drawer Overlay */}
@@ -152,9 +124,9 @@ export default function AdminNavigator({ navigation }: any) {
                         key={index} 
                         style={[styles.drawerItem, isActive && styles.drawerItemActive]}
                         onPress={() => {
-                          handleSetTab(index);
+                          setActiveTab(index);
                           setMenuExpanded(false); // Hide remaining tabs
-                          if ([1, 4, 5, 8].indexOf(index) === -1) setEditingData(null);
+                          if ([1, 4, 5, 8].indexOf(index) === -1) setEditingData(null); 
                         }}
                       >
                         <tab.icon 
@@ -171,26 +143,9 @@ export default function AdminNavigator({ navigation }: any) {
                 </View>
               </ScrollView>
 
-              {/* Footer Actions */}
+              {/* Sign Out Button */}
               <View style={styles.drawerFooter}>
-                <TouchableOpacity 
-                  style={[styles.drawerSignOutBtn, { 
-                    marginBottom: 16, 
-                    backgroundColor: 'rgba(252, 211, 77, 0.15)', 
-                    borderWidth: 1, 
-                    borderColor: 'rgba(252, 211, 77, 0.5)',
-                    flexDirection: 'row',
-                    justifyContent: 'center',
-                    gap: 10
-                  }]} 
-                  onPress={() => setViewMode('member')}
-                >
-                  <Smartphone size={20} color="#FCD34D" />
-                  <Text style={[styles.drawerSignOutTxt, { color: '#FCD34D', fontWeight: '800' }]}>Member View</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={[styles.drawerSignOutBtn, { flexDirection: 'row', justifyContent: 'center', gap: 10 }]} onPress={signOut}>
-                  <LogOut size={20} color="#fff" />
+                <TouchableOpacity style={styles.drawerSignOutBtn} onPress={signOut}>
                   <Text style={styles.drawerSignOutTxt}>Sign out</Text>
                 </TouchableOpacity>
               </View>

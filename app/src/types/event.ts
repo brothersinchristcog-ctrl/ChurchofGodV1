@@ -1,6 +1,6 @@
 // types/event.ts
 export type EventType = 'worship' | 'prayer' | 'meeting' | 'outreach' | 'funeral';
-export type TransportMode = 'car' | 'bike' | 'bus';
+export type TransportMode = 'car' | 'bike' | 'walk';
 
 export interface PastorEvent {
   id:           string;
@@ -20,13 +20,13 @@ export interface PastorEvent {
   notes:        string;
   section:      'today' | 'upcoming' | 'past';
   travel: {
-    isFirstEvent?: boolean;
-    prevVenueName?: string;
     distKm:  number;
     car:     number;             // minutes
     bike:    number;
-    bus:     number;
-    homeDistKm?: number;
-    homeCar?: number;
+    walk:    number;
+    isHomeToEvent?: boolean;
+    originLat?: number;
+    originLng?: number;
+    originName?: string;
   };
 }

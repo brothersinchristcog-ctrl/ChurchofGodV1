@@ -2,9 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
-import { Home, Heart, BookOpen, HandCoins, User, ShieldCheck, Users as UsersSwitch } from 'lucide-react-native';
+import { Home, Heart, BookOpen, HandCoins, User } from 'lucide-react-native';
 import { ActivityIndicator, View, Text, StyleSheet, Alert, Platform, TouchableOpacity, AppState, Image } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import firestore from '@react-native-firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Lock } from 'lucide-react-native';
@@ -26,7 +25,6 @@ import HomeScreen from '../screens/HomeScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import PromiseArchiveScreen from '../screens/PromiseArchiveScreen';
 import DailyVideoScreen from '../screens/DailyVideoScreen';
-import SermonVideoScreen from '../screens/SermonVideoScreen';
 import EventsScreen from '../screens/EventsScreen';
 import PrayerWallScreen from '../screens/PrayerWallScreen';
 import GivingScreen from '../screens/GivingScreen';
@@ -40,13 +38,6 @@ import BibleReaderScreen from '../screens/BibleReaderScreen';
 import BiblePlansScreen from '../screens/BiblePlansScreen';
 import MemberNotesScreen from '../screens/MemberNotesScreen';
 import MembersScreen from '../screens/MembersScreen';
-import BibleSearchScreen from '../screens/BibleSearchScreen';
-import AboutUsScreen from '../screens/AboutUsScreen';
-import ContactUsScreen from '../screens/ContactUsScreen';
-import PastorEventDetail from '../screens/admin/pastor_events/PastorEventDetail';
-import CreatePastorEvent from '../screens/admin/pastor_events/CreatePastorEvent';
-import PastorEventRoutePlanner from '../screens/admin/pastor_events/PastorEventRoutePlanner';
-import PastorEventMap from '../screens/admin/pastor_events/PastorEventMap';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -81,10 +72,8 @@ const CustomTabBarButton = ({ children, onPress }: any) => (
 );
 
 function TabNavigator() {
-  const { user, signOut, member, viewMode, setViewMode } = useAuth();
-  const insets = useSafeAreaInsets();
+  const { user, signOut } = useAuth();
   const isGuest = user?.isAnonymous;
-  const isActualAdmin = member?.userType?.toLowerCase() === 'admin';
 
   const handleGuestInteraction = (e: any) => {
     if (isGuest) {
@@ -109,8 +98,7 @@ function TabNavigator() {
   };
 
   return (
-    <>
-      <Tab.Navigator
+    <Tab.Navigator
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused }) => {
           const isSermon = route.name === 'Sermons';
@@ -168,52 +156,17 @@ function TabNavigator() {
         listeners={{ tabPress: handleGuestInteraction }}
       />
     </Tab.Navigator>
-
-    {/* Floating Switch to Admin pill — only visible to real admins in member view */}
-    {isActualAdmin && viewMode === 'member' && (
-      <TouchableOpacity
-        onPress={() => setViewMode('admin')}
-        style={{
-          position: 'absolute',
-          bottom: Platform.OS === 'ios' ? 140 : 130,
-          right: 20,
-          backgroundColor: '#1a2d5a', // solid navy
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-          borderRadius: 30,
-          borderWidth: 1,
-          borderColor: 'rgba(252, 211, 77, 0.5)', // golden border
-          gap: 8,
-          elevation: 10,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 6 },
-          shadowOpacity: 0.35,
-          shadowRadius: 10,
-          zIndex: 999
-        }}
-      >
-        <ShieldCheck size={18} color="#FCD34D" />
-        <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>Admin View</Text>
-      </TouchableOpacity>
-    )}
-    </>
   );
 }
 
 function Navigation() {
-  const { user, member, loading, viewMode } = useAuth();
+  const { user, member, loading } = useAuth();
   const navigation = useNavigation();
   const [onboardingComplete, setOnboardingComplete] = React.useState<boolean | null>(null);
   const [showSplash, setShowSplash] = useState(true);
-  const [isLocked, setIsLocked] = useState(false);
+  const [isLocked, setIsLocked] = useState(false); // Default to false, check on mount
   const appState = React.useRef(AppState.currentState);
 
-  const isAdmin = member?.userType?.toLowerCase() === 'admin';
-  // Show admin UI only when userType is admin AND viewMode is admin
-  const showAdminView = isAdmin && viewMode === 'admin';
-  const navigationKey = showAdminView ? 'admin-root' : 'member-root';
   // 1. Initial Security Check & App State Listener
   useEffect(() => {
     const handleSecurity = async () => {
@@ -392,22 +345,26 @@ function Navigation() {
     );
   }
 
+  const userTypeStr = member?.userType?.toLowerCase() || '';
+  const isAdmin = userTypeStr === 'admin' || 
+                  userTypeStr === 'pastor' || 
+                  userTypeStr === 'system administrator' || 
+                  userTypeStr.includes('admin') || 
+                  userTypeStr.includes('pastor');
+                  
+  console.log('🧭 [RootNavigator] Evaluated userType:', userTypeStr, '-> isAdmin:', isAdmin);
+  
+  const navigationKey = isAdmin ? 'admin-root' : 'member-root';
+
   return (
     <Stack.Navigator key={navigationKey} screenOptions={{ headerShown: false }}>
       {user ? (
-        showAdminView ? (
-          <>
-            <Stack.Screen name="AdminRoot" component={AdminNavigator} />
-            <Stack.Screen name="EventDetail" component={PastorEventDetail} />
-            <Stack.Screen name="CreateEvent" component={CreatePastorEvent} />
-            <Stack.Screen name="RoutePlanner" component={PastorEventRoutePlanner} />
-            <Stack.Screen name="EventMap" component={PastorEventMap} />
-          </>
+        isAdmin ? (
+          <Stack.Screen name="AdminRoot" component={AdminNavigator} />
         ) : onboardingComplete ? (
           <>
             <Stack.Screen name="Tabs" component={TabNavigator} />
             <Stack.Screen name="DailyVideo" component={DailyVideoScreen} />
-            <Stack.Screen name="SermonVideo" component={SermonVideoScreen} />
             <Stack.Screen name="Events" component={EventsScreen} />
             <Stack.Screen name="Give" component={GivingScreen} />
             <Stack.Screen name="Sermons" component={SermonsScreen} />
@@ -419,11 +376,8 @@ function Navigation() {
             <Stack.Screen name="BibleChapters" component={BibleChaptersScreen} />
             <Stack.Screen name="BibleReader" component={BibleReaderScreen} />
             <Stack.Screen name="BiblePlans" component={BiblePlansScreen} />
-            <Stack.Screen name="BibleSearch" component={BibleSearchScreen} />
             <Stack.Screen name="MemberNotes" component={MemberNotesScreen} />
             <Stack.Screen name="Members" component={MembersScreen} />
-            <Stack.Screen name="AboutUs" component={AboutUsScreen} />
-            <Stack.Screen name="ContactUs" component={ContactUsScreen} />
           </>
         ) : (
           <Stack.Screen name="Onboarding" component={OnboardingScreen} />

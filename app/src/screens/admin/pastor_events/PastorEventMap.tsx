@@ -21,16 +21,8 @@ let Polyline: any = null;
 let Callout: any = null;
 let isMapsAvailable = false;
 
-try {
-  const Maps = require('react-native-maps');
-  MapView = Maps.default || Maps;
-  Marker = Maps.Marker;
-  Polyline = Maps.Polyline;
-  Callout = Maps.Callout;
-  isMapsAvailable = !!MapView;
-} catch (e) {
-  isMapsAvailable = false;
-}
+// Force disabled on Android due to Fabric (New Architecture) crashes with MapMarker.addView
+isMapsAvailable = false;
 
 // Try to safely load react-native-svg
 let Svg: any = null;
@@ -45,6 +37,7 @@ try {
 
 const MockMapView = React.forwardRef(({
   sortedEvents,
+  groupedEventsList,
   selectedEventId,
   onMarkerPress,
   style
@@ -126,32 +119,50 @@ const MockMapView = React.forwardRef(({
       )}
 
       {/* Custom Schematic Markers */}
-      {sortedEvents.map((evt: any, idx: number) => {
-        const { x, y } = getPosition(evt.lat, evt.lng);
-        const color = markerColors[evt.type as keyof typeof markerColors] || markerColors.worship;
-        const isSelected = selectedEventId === evt.id;
+      {groupedEventsList.map((group: any) => {
+        const firstEvt = group[0].event;
+        const { x, y } = getPosition(firstEvt.lat, firstEvt.lng);
+        const isGroupSelected = group.some((e: any) => e.event.id === selectedEventId);
 
         return (
-          <TouchableOpacity
-            key={evt.id}
-            style={[
-              styles.numberedMarker,
-              {
-                position: 'absolute',
-                left: x - 18,
-                top: y - 18,
-                backgroundColor: color,
-                borderColor: isSelected ? '#FFFFFF' : color,
-                borderWidth: isSelected ? 3 : 1,
-                transform: [{ scale: isSelected ? 1.25 : 1 }],
-                elevation: isSelected ? 8 : 3,
-                shadowColor: isSelected ? '#000' : 'transparent',
-              }
-            ]}
-            onPress={() => onMarkerPress(evt, idx)}
+          <View
+            key={`group_${firstEvt.id}`}
+            style={{
+              position: 'absolute',
+              left: x - 18,
+              top: y - 18,
+              flexDirection: 'row',
+              gap: 6,
+              elevation: isGroupSelected ? 8 : 3,
+              zIndex: isGroupSelected ? 10 : 1
+            }}
           >
-            <Text style={styles.numberedMarkerText}>{idx + 1}</Text>
-          </TouchableOpacity>
+            {group.map((item: any) => {
+              const evt = item.event;
+              const idx = item.originalIndex;
+              const color = markerColors[evt.type as keyof typeof markerColors] || markerColors.worship;
+              const isSelected = selectedEventId === evt.id;
+
+              return (
+                <TouchableOpacity
+                  key={evt.id}
+                  style={[
+                    styles.numberedMarker,
+                    {
+                      backgroundColor: color,
+                      borderColor: isSelected ? '#FFFFFF' : color,
+                      borderWidth: isSelected ? 3 : 1,
+                      transform: [{ scale: isSelected ? 1.25 : 1 }],
+                      shadowColor: isSelected ? '#000' : 'transparent',
+                    }
+                  ]}
+                  onPress={() => onMarkerPress(evt, idx)}
+                >
+                  <Text style={styles.numberedMarkerText}>{idx + 1}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         );
       })}
 
@@ -196,6 +207,17 @@ export const PastorEventMap = ({ route, navigation }: { route: any; navigation: 
 
   // Sort events chronologically
   const sortedEvents = [...events].sort((a, b) => timeToMins(a.startTime) - timeToMins(b.startTime));
+
+  // Group events by location to show them side-by-side
+  const groupedEventsList = React.useMemo(() => {
+    const groups: { [key: string]: { event: PastorEvent, originalIndex: number }[] } = {};
+    sortedEvents.forEach((evt, idx) => {
+      const key = `${evt.lat.toFixed(4)}_${evt.lng.toFixed(4)}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push({ event: evt, originalIndex: idx });
+    });
+    return Object.values(groups);
+  }, [sortedEvents]);
 
   // Determine initial region
   const defaultRegion = {
@@ -325,33 +347,47 @@ export const PastorEventMap = ({ route, navigation }: { route: any; navigation: 
           )}
 
           {/* Custom Marker Pins */}
-          {sortedEvents.map((evt, idx) => {
-            const color = markerColors[evt.type as keyof typeof markerColors] || markerColors.worship;
-            const isSelected = selectedEventId === evt.id;
+          {groupedEventsList.map((group) => {
+            const firstEvt = group[0].event;
+            const isGroupSelected = group.some(e => e.event.id === selectedEventId);
+            const titles = group.map(e => e.event.title).join(' & ');
+            const times = group.map(e => `${e.event.startTime} (Stop #${e.originalIndex + 1})`).join('\n');
+
             return (
               <Marker
-                key={evt.id}
-                coordinate={{ latitude: evt.lat, longitude: evt.lng }}
-                onPress={() => handleMarkerPress(evt)}
+                key={`group_${firstEvt.id}`}
+                coordinate={{ latitude: firstEvt.lat, longitude: firstEvt.lng }}
+                onPress={() => handleMarkerPress(firstEvt)}
                 tracksViewChanges={false}
-                zIndex={isSelected ? 10 : 1}
+                zIndex={isGroupSelected ? 10 : 1}
               >
-                <View style={[
-                  styles.numberedMarker,
-                  {
-                    backgroundColor: color,
-                    borderColor: isSelected ? '#FFFFFF' : color,
-                    borderWidth: isSelected ? 3 : 1,
-                    transform: [{ scale: isSelected ? 1.25 : 1 }],
-                    shadowColor: isSelected ? '#000' : 'transparent',
-                  }
-                ]}>
-                  <Text style={styles.numberedMarkerText}>{idx + 1}</Text>
+                <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                  {group.map((item) => {
+                    const evt = item.event;
+                    const idx = item.originalIndex;
+                    const color = markerColors[evt.type as keyof typeof markerColors] || markerColors.worship;
+                    const isSelected = selectedEventId === evt.id;
+
+                    return (
+                      <View style={[
+                        styles.numberedMarker,
+                        {
+                          backgroundColor: color,
+                          borderColor: isSelected ? '#FFFFFF' : color,
+                          borderWidth: isSelected ? 3 : 1,
+                          transform: [{ scale: isSelected ? 1.25 : 1 }],
+                          shadowColor: isSelected ? '#000' : 'transparent',
+                        }
+                      ]} key={evt.id}>
+                        <Text style={styles.numberedMarkerText}>{idx + 1}</Text>
+                      </View>
+                    );
+                  })}
                 </View>
                 <Callout tooltip>
                   <View style={styles.calloutContainer}>
-                    <Text style={styles.calloutTitle}>{evt.title}</Text>
-                    <Text style={styles.calloutTime}>{evt.startTime} · Stop #{idx + 1}</Text>
+                    <Text style={styles.calloutTitle}>{titles}</Text>
+                    <Text style={styles.calloutTime}>{times}</Text>
                   </View>
                 </Callout>
               </Marker>
@@ -363,6 +399,7 @@ export const PastorEventMap = ({ route, navigation }: { route: any; navigation: 
           ref={mapRef}
           style={styles.map}
           sortedEvents={sortedEvents}
+          groupedEventsList={groupedEventsList}
           selectedEventId={selectedEventId}
           onMarkerPress={selectEvent}
         />

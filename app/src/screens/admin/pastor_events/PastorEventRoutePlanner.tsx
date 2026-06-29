@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,7 @@ import {
   StyleSheet,
   SafeAreaView,
   StatusBar,
-  TextInput,
-  ActivityIndicator
+  TextInput
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing, radius, typography, shadow } from '../../../theme/Theme';
@@ -18,7 +17,6 @@ import { detectConflicts } from '../../../utils/conflicts';
 import { saveStartingLocation, getStartingLocation, formatDuration } from '../../../utils/locationStore';
 import TransportToggle from '../../../components/TransportToggle';
 import RouteChain, { RouteStop, RouteLeg } from '../../../components/RouteChain';
-import { useFocusEffect } from '@react-navigation/native';
 
 export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; navigation: any }) => {
   const { events = [] } = route.params as { events: PastorEvent[] };
@@ -26,7 +24,7 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
   const [stops, setStops] = useState<RouteStop[]>([]);
   const [legs, setLegs] = useState<RouteLeg[]>([]);
   const [conflicts, setConflicts] = useState<{ message: string }[]>([]);
-  const [currentLocName, setCurrentLocName] = useState('');
+  const [currentLocName, setCurrentLocName] = useState('Guntur, AP');
   const [currentLoc, setCurrentLoc] = useState<{lat: number, lng: number} | null>(null);
   const [isGeocoding, setIsGeocoding] = useState(false);
 
@@ -45,30 +43,34 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
   };
 
   // Sort events by time to plan the route sequentially
-  const sortedEvents = React.useMemo(() => {
-    return [...events].sort((a, b) => timeToMins(a.startTime) - timeToMins(b.startTime));
-  }, [events]);
+  const sortedEvents = [...events].sort((a, b) => timeToMins(a.startTime) - timeToMins(b.startTime));
 
-  // Initialize with saved location every time the screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      const fetchInitialLoc = async () => {
-        try {
-          setIsGeocoding(true);
-          const saved = await getStartingLocation();
-          if (saved && saved.lat && saved.lng && saved.name) {
-            setCurrentLoc({ lat: saved.lat, lng: saved.lng });
-            setCurrentLocName(saved.name);
-          }
-        } catch (e) {
-          console.log('Location fetch failed');
-        } finally {
-          setIsGeocoding(false);
+  // Initialize with saved location, then IP-based fallback if none saved
+  useEffect(() => {
+    const fetchInitialLoc = async () => {
+      try {
+        setIsGeocoding(true);
+        const saved = await getStartingLocation();
+        if (saved && saved.lat && saved.lng && saved.name) {
+          setCurrentLoc({ lat: saved.lat, lng: saved.lng });
+          setCurrentLocName(saved.name);
+          return;
         }
-      };
-      fetchInitialLoc();
-    }, [])
-  );
+
+        const ipResp = await fetch('http://ip-api.com/json/');
+        const ipData = await ipResp.json();
+        if (ipData && ipData.lat && ipData.lon) {
+          setCurrentLoc({ lat: ipData.lat, lng: ipData.lon });
+          setCurrentLocName(ipData.city || 'Guntur, AP');
+        }
+      } catch (e) {
+        console.log('IP Location failed');
+      } finally {
+        setIsGeocoding(false);
+      }
+    };
+    fetchInitialLoc();
+  }, []);
 
   // Handle manual starting address change
   const handleAddressSubmit = async (newAddress: string) => {
@@ -82,25 +84,22 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
       const geoData = await geoResp.json();
       if (geoData.status === 'OK' && geoData.results.length > 0) {
         const { lat, lng } = geoData.results[0].geometry.location;
-        const formattedName = geoData.results[0].formatted_address || newAddress;
         setCurrentLoc({ lat, lng });
-        setCurrentLocName(formattedName);
         
         // Save back for persistence across app
-        await saveStartingLocation({ name: formattedName, lat, lng });
-      } else {
-        alert('Could not locate that address. Please try again.');
+        await saveStartingLocation({ name: newAddress, lat, lng });
       }
     } catch (e) {
       console.log('Geocoding failed');
-      alert('Network error while geocoding.');
     } finally {
       setIsGeocoding(false);
     }
   };
 
-  // Generate stops (runs instantly on currentLocName or events change)
   useEffect(() => {
+    const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || '';
+    
+    // Generate stops list
     const generatedStops: RouteStop[] = [
       { label: currentLocName, sublabel: 'Starting Point', isHome: true }
     ];
@@ -112,12 +111,6 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
       });
     });
     setStops(generatedStops);
-  }, [currentLocName, sortedEvents]);
-
-  // Calculate distances (runs only when mode, events, or currentLoc changes)
-  useEffect(() => {
-    let isActive = true;
-    const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || '';
 
     const calculateDistances = async () => {
       const generatedLegs: RouteLeg[] = [];
@@ -169,8 +162,8 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
         if (carMins === 0) carMins = Math.round(distKm * 2); // rough estimate: 2 mins per km
 
         let duration = carMins;
-        if (mode === 'bike') duration = Math.round(carMins * 0.9); // Motorcycle is slightly faster in traffic
-        else if (mode === 'bus') duration = Math.round(carMins * 1.5);
+        if (mode === 'bike') duration = Math.round(carMins * 2.5);
+        else if (mode === 'walk') duration = Math.round(carMins * 8);
 
         generatedLegs.push({
           distKm: distKm,
@@ -179,18 +172,13 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
         });
       }
 
-      if (isActive) {
-        setLegs(generatedLegs);
-        setConflicts(detectConflicts(sortedEvents, generatedLegs));
-      }
+      setLegs(generatedLegs);
+      setConflicts(detectConflicts(sortedEvents, generatedLegs));
     };
 
     calculateDistances();
 
-    return () => {
-      isActive = false;
-    };
-  }, [mode, events, currentLoc]); // removed currentLocName so typing doesn't trigger API calls
+  }, [mode, events, currentLoc, currentLocName]);
 
   const handleLaunchGoogleMaps = () => {
     // Collect coordinates for the route
@@ -275,32 +263,17 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
 
         <View style={{ backgroundColor: '#fff', padding: spacing.md, borderRadius: radius.md, marginBottom: spacing.md, elevation: 2 }}>
           <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 8 }}>
-            HOME
+            STARTING FROM
           </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <TextInput
-              style={{ flex: 1, backgroundColor: colors.bgSecondary, padding: 12, borderRadius: radius.sm, fontSize: 16, color: colors.textPrimary }}
-              value={currentLocName}
-              onChangeText={setCurrentLocName}
-              onEndEditing={(e) => handleAddressSubmit(e.nativeEvent.text)}
-              onSubmitEditing={(e) => handleAddressSubmit(e.nativeEvent.text)}
-              placeholder="Type starting address..."
-              returnKeyType="search"
-            />
-            <TouchableOpacity 
-              style={{ marginLeft: 8, backgroundColor: colors.primary, padding: 12, borderRadius: radius.sm }}
-              onPress={() => handleAddressSubmit(currentLocName)}
-              disabled={isGeocoding}
-            >
-              {isGeocoding ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : (
-                <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Update</Text>
-              )}
-            </TouchableOpacity>
-          </View>
+          <TextInput
+            style={{ backgroundColor: colors.bgSecondary, padding: 12, borderRadius: radius.sm, fontSize: 16, color: colors.textPrimary }}
+            value={currentLocName}
+            onChangeText={setCurrentLocName}
+            onEndEditing={(e) => handleAddressSubmit(e.nativeEvent.text)}
+            placeholder="Type starting address..."
+          />
           <Text style={{ fontSize: 11, color: colors.textTertiary, marginTop: 4 }}>
-            Press Update or Enter on keyboard to lock in your custom start location and recalculate distances.
+            {isGeocoding ? 'Updating coordinates...' : 'Press Enter on keyboard to lock in your custom start location.'}
           </Text>
         </View>
 
