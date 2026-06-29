@@ -249,7 +249,7 @@ spfkUchVp71l4aWpCW50lro=
         const exactMatch = result.records.find((rec: any) => {
           const p1 = (rec.Phone || '').replace(/\D/g, '');
           const p2 = (rec.MobilePhone || '').replace(/\D/g, '');
-          return p1.endsWith(last10) || p2.endsWith(last10) || (uid && rec.Mobile_App_ID__c === uid);
+          return p1.endsWith(tenDigit) || p2.endsWith(tenDigit) || (uid && rec.Mobile_App_ID__c === uid);
         });
 
         if (exactMatch) {
