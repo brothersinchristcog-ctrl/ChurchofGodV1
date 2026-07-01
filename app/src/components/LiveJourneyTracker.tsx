@@ -26,6 +26,10 @@ interface LiveJourneyTrackerProps {
   destinationName: string;
   initialDistanceKm?: number;
   initialDurationMins?: number;
+  altHome?: LatLng;
+  altInitialDistanceKm?: number;
+  altInitialDurationMins?: number;
+  isDisabled?: boolean;
 }
 
 type TravelStatus = 'Traveling' | 'Stopped' | 'Arrived';
@@ -36,7 +40,13 @@ const LiveJourneyTracker: React.FC<LiveJourneyTrackerProps> = ({
   destinationName,
   initialDistanceKm,
   initialDurationMins,
+  altHome,
+  altInitialDistanceKm,
+  altInitialDurationMins,
+  isDisabled = false,
 }) => {
+  const [selectedMode, setSelectedMode] = useState<'primary' | 'alt'>('primary');
+  const activeHome = selectedMode === 'primary' ? home : (altHome || home);
   const [isTracking, setIsTracking] = useState(false);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [currentLocation, setCurrentLocation] = useState<LatLng | null>(null);
@@ -53,7 +63,14 @@ const LiveJourneyTracker: React.FC<LiveJourneyTrackerProps> = ({
 
   // Initial fetch for Total Distance (Home to Destination)
   useEffect(() => {
-    if (initialDistanceKm !== undefined && initialDurationMins !== undefined) {
+    if (selectedMode === 'alt' && altInitialDistanceKm !== undefined && altInitialDurationMins !== undefined) {
+      setTotalKm(altInitialDistanceKm);
+      setRemainingKm(altInitialDistanceKm);
+      setRemainingMins(altInitialDurationMins);
+      return;
+    }
+    
+    if (selectedMode === 'primary' && initialDistanceKm !== undefined && initialDurationMins !== undefined) {
       setTotalKm(initialDistanceKm);
       setRemainingKm(initialDistanceKm);
       setRemainingMins(initialDurationMins);
@@ -64,24 +81,45 @@ const LiveJourneyTracker: React.FC<LiveJourneyTrackerProps> = ({
       try {
         const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY;
         if (!GOOGLE_KEY) return;
+        const loc = activeHome;
         const res = await fetch(
-          `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${home.lat},${home.lng}&destinations=${destination.lat},${destination.lng}&key=${GOOGLE_KEY}`
-        );
-        const data = await res.json();
-        if (data.status === 'OK' && data.rows[0].elements[0].status === 'OK') {
-          const distKm = data.rows[0].elements[0].distance.value / 1000;
-          setTotalKm(distKm);
-          setRemainingKm(distKm);
-          setRemainingMins(Math.round(data.rows[0].elements[0].duration.value / 60));
+            `https://maps.googleapis.com/maps/api/directions/json?origin=${loc.lat},${loc.lng}&destination=${destination.lat},${destination.lng}&key=${GOOGLE_KEY}`
+          );
+          const data = await res.json();
+          if (data.status === 'OK' && data.routes.length > 0) {
+            const distKm = data.routes[0].legs[0].distance.value / 1000;
+            const durationMins = Math.round(data.routes[0].legs[0].duration.value / 60);
+
+            // Fetch nearest road to snap the location for map viewing
+            try {
+              const snapRes = await fetch(`https://roads.googleapis.com/v1/nearestRoads?points=${loc.lat},${loc.lng}&key=${GOOGLE_KEY}`);
+              const snapData = await snapRes.json();
+              if (snapData.snappedPoints && snapData.snappedPoints.length > 0) {
+                // If snapped successfully, optionally use snap coordinates for UI
+              }
+            } catch (err) {}
+
+            setTotalKm(distKm);
+            setRemainingKm(distKm);
+            setRemainingMins(durationMins);
+            setCurrentLocationName(loc.name || 'Current Location');
+            setStatus('Traveling');
+          } else {
+            // Reached or routing failed
+            if (data.status === 'ZERO_RESULTS') {
+              setStatus('Stopped');
+            }
+          }
+        } catch (e) {
+          console.warn('Distance Matrix failed:', e);
+        } finally {
+          setIsUpdating(false);
         }
-      } catch (e) {
-        console.warn('Failed to fetch initial distance', e);
-      }
     };
-    if (home.lat && destination.lat) {
+    if (activeHome.lat && destination.lat) {
       fetchInitialDistance();
     }
-  }, [home, destination, initialDistanceKm, initialDurationMins]);
+  }, [activeHome, destination, initialDistanceKm, initialDurationMins, altInitialDistanceKm, altInitialDurationMins, selectedMode]);
 
   const [isSimulating, setIsSimulating] = useState(false);
 
@@ -125,7 +163,7 @@ const LiveJourneyTracker: React.FC<LiveJourneyTrackerProps> = ({
       setLastMovedAt(Date.now());
       
       // Start simulation from home coordinates
-      setCurrentLocation({ lat: home.lat, lng: home.lng });
+      setCurrentLocation({ lat: activeHome.lat, lng: activeHome.lng });
     }
   };
 
@@ -142,10 +180,10 @@ const LiveJourneyTracker: React.FC<LiveJourneyTrackerProps> = ({
 
     if (isSimulating && isTracking) {
       // SIMULATION MODE
-      let currentLat = home.lat;
-      let currentLng = home.lng;
-      const latStep = (destination.lat - home.lat) / 20; // 20 steps to destination
-      const lngStep = (destination.lng - home.lng) / 20;
+      let currentLat = activeHome.lat;
+      let currentLng = activeHome.lng;
+      const latStep = (destination.lat - activeHome.lat) / 20; // 20 steps to destination
+      const lngStep = (destination.lng - activeHome.lng) / 20;
 
       simInterval = setInterval(() => {
         currentLat += latStep;
@@ -178,7 +216,7 @@ const LiveJourneyTracker: React.FC<LiveJourneyTrackerProps> = ({
       if (locationInterval) clearInterval(locationInterval);
       if (simInterval) clearInterval(simInterval);
     };
-  }, [isTracking, hasPermission, isSimulating, lastMovedAt, status, home, destination]);
+  }, [isTracking, hasPermission, isSimulating, lastMovedAt, status, activeHome, destination]);
 
   const updateJourney = async (lat: number, lng: number) => {
     setCurrentLocation({ lat, lng });
@@ -276,8 +314,8 @@ const LiveJourneyTracker: React.FC<LiveJourneyTrackerProps> = ({
       <View style={[styles.headerRow, { flexWrap: 'wrap', gap: 8 }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1, flexWrap: 'wrap', gap: 6 }}>
           <Text style={styles.cardLabel}>{isSimulating ? 'Live Tracker (Simulation)' : 'Live Journey Tracker'}</Text>
-          <View style={{ backgroundColor: colors.primaryLight, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.full }}>
-            <Text style={{ fontSize: 10, fontWeight: '700', color: colors.primaryDark }}>
+          <View style={{ backgroundColor: '#FFF', borderWidth: 1, borderColor: colors.primary, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.full }}>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: colors.primary }}>
               {remainingKm.toFixed(1)} km • {remainingMins >= 60 ? `${Math.floor(remainingMins / 60)}h ${remainingMins % 60}m` : `${remainingMins}m`}
             </Text>
           </View>
@@ -287,16 +325,42 @@ const LiveJourneyTracker: React.FC<LiveJourneyTrackerProps> = ({
 
       {/* Progress Bar Area */}
       <View style={styles.progressContainer}>
-        <View style={styles.endpointsRow}>
-          <View style={styles.endpoint}>
-            <Ionicons name="home" size={20} color={colors.textSecondary} />
-            <Text style={styles.endpointText} numberOfLines={1}>{home.name || 'Home'}</Text>
+          {/* Toggle for multiple origins */}
+          {altHome && (
+            <View style={{ marginBottom: 16 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, paddingHorizontal: 4 }}>
+                <Ionicons name="information-circle-outline" size={14} color={colors.textTertiary} />
+                <Text style={{ fontSize: 11, color: colors.textTertiary, marginLeft: 4 }}>
+                  Multiple events today. Select your starting point:
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', backgroundColor: colors.bgSecondary, borderRadius: radius.full, padding: 4 }}>
+                <TouchableOpacity 
+                  style={{ flex: 1, paddingVertical: 8, paddingHorizontal: 4, alignItems: 'center', backgroundColor: selectedMode === 'primary' ? colors.primary : 'transparent', borderRadius: radius.full, ...((selectedMode === 'primary') ? shadow.card : {}) }}
+                  onPress={() => { setSelectedMode('primary'); setIsTracking(false); setStatus('Traveling'); carProgress.setValue(0); }}
+                >
+                  <Text numberOfLines={1} ellipsizeMode="tail" style={{ fontSize: 11, fontWeight: '700', color: selectedMode === 'primary' ? '#FFF' : colors.textSecondary }}>{home.name || 'Origin'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={{ flex: 1, paddingVertical: 8, paddingHorizontal: 4, alignItems: 'center', backgroundColor: selectedMode === 'alt' ? colors.primary : 'transparent', borderRadius: radius.full, ...((selectedMode === 'alt') ? shadow.card : {}) }}
+                  onPress={() => { setSelectedMode('alt'); setIsTracking(false); setStatus('Traveling'); carProgress.setValue(0); }}
+                >
+                  <Text numberOfLines={1} ellipsizeMode="tail" style={{ fontSize: 11, fontWeight: '700', color: selectedMode === 'alt' ? '#FFF' : colors.textSecondary }}>{altHome.name || 'Alt Origin'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          <View style={styles.endpointsRow}>
+            <View style={styles.endpoint}>
+              <Ionicons name="location" size={16} color={colors.primary} />
+              <Text style={styles.endpointText} numberOfLines={1}>{activeHome.name || 'Origin'}</Text>
+            </View>
+            <View style={[styles.endpoint, { alignItems: 'flex-end' }]}>
+              <Ionicons name="flag" size={16} color={colors.primary} />
+              <Text style={styles.endpointText} numberOfLines={1}>{destinationName}</Text>
+            </View>
           </View>
-          <View style={[styles.endpoint, { alignItems: 'flex-end' }]}>
-            <Ionicons name="flag" size={20} color={colors.textSecondary} />
-            <Text style={styles.endpointText} numberOfLines={1}>{destinationName}</Text>
-          </View>
-        </View>
 
         <View style={styles.trackContainer}>
           <View style={styles.trackLine} />
@@ -358,10 +422,17 @@ const LiveJourneyTracker: React.FC<LiveJourneyTrackerProps> = ({
       {/* Actions */}
       <View style={styles.actionRow}>
         {!isTracking && status !== 'Arrived' ? (
-          <TouchableOpacity style={styles.startButton} onPress={handleStartTracking}>
-            <Ionicons name="play" size={18} color="#FFF" />
-            <Text style={styles.startButtonText}>Start Journey</Text>
-          </TouchableOpacity>
+          isDisabled ? (
+            <View style={[styles.startButton, { backgroundColor: colors.border }]}>
+              <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} />
+              <Text style={[styles.startButtonText, { color: colors.textSecondary }]}>Available on event day</Text>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.startButton} onPress={handleStartTracking}>
+              <Ionicons name="play" size={18} color="#FFF" />
+              <Text style={styles.startButtonText}>Start Journey</Text>
+            </TouchableOpacity>
+          )
         ) : isTracking ? (
           <TouchableOpacity style={styles.stopButton} onPress={handleStopTracking}>
             <Ionicons name="stop" size={18} color={colors.error} />

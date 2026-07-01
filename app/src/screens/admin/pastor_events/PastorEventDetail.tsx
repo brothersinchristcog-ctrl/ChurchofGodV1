@@ -22,7 +22,6 @@ import DistanceBadge from '../../../components/DistanceBadge';
 import { getStartingLocation } from '../../../utils/locationStore';
 import MapView from 'react-native-maps';
 import * as Speech from 'expo-speech';
-import LiveJourneyTracker from '../../../components/LiveJourneyTracker';
 import { SavedLocation } from '../../../utils/locationStore';
 
 export const PastorEventDetail = ({ route, navigation }: { route: any; navigation: any }) => {
@@ -180,7 +179,7 @@ export const PastorEventDetail = ({ route, navigation }: { route: any; navigatio
   };
 
   const handleDirections = () => {
-    openInMaps(event.lat || 0, event.lng || 0, event.title, event.address || event.venue);
+    openInMaps(event.lat || 0, event.lng || 0, event.title, [event.venue, event.address, event.city].filter(Boolean).join(', '));
   };
 
   const handleEdit = () => {
@@ -255,8 +254,9 @@ export const PastorEventDetail = ({ route, navigation }: { route: any; navigatio
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Main Header Info Card */}
+        {/* Unified Main Event Info Card */}
         <View style={styles.card}>
+          {/* 1. Header Info */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <Text style={[styles.mainTitle, { flex: 1, marginBottom: 16 }]}>{event.title}</Text>
             <TouchableOpacity 
@@ -271,7 +271,7 @@ export const PastorEventDetail = ({ route, navigation }: { route: any; navigatio
             </TouchableOpacity>
           </View>
 
-          <View style={{ gap: 12 }}>
+          <View style={{ gap: 12, marginBottom: spacing.lg }}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Ionicons name="calendar-outline" size={18} color={colors.primary} />
               <Text style={[styles.timeVal, { marginLeft: 8 }]}>{formatDate(event.date)}</Text>
@@ -291,58 +291,17 @@ export const PastorEventDetail = ({ route, navigation }: { route: any; navigatio
               </Text>
             </View>
           </View>
-        </View>
 
-        {/* Live Journey Tracker */}
-        {event.lat && event.lng && (
-          <LiveJourneyTracker
-            home={homeLocation || { lat: 15.8281, lng: 78.0373, name: 'Kurnool' }} // Default to Kurnool for testing if no home is set
-            destination={{ lat: event.lat, lng: event.lng }}
-            destinationName={event.venue || event.title || 'Destination'}
-          />
-        )}
+          <View style={styles.divider} />
 
-        {/* Travel Info Card if present */}
-        {event.travel && event.travel.distKm > 0 && (
-          <View style={[styles.card, { borderColor: colors.primaryMid }]}>
-            <Text style={styles.cardLabel}>Travel Estimates from previous stop</Text>
-            
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md }}>
-              <Ionicons name="map-outline" size={18} color={colors.textSecondary} />
-              <Text style={{ fontSize: 15, fontWeight: '700', marginLeft: 8, color: colors.textPrimary }}>
-                Distance: {event.travel.distKm.toFixed(1)} km
-              </Text>
-            </View>
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', backgroundColor: colors.bgSecondary, padding: 12, borderRadius: radius.sm }}>
-              <View style={{ alignItems: 'center' }}>
-                <Ionicons name="car" size={24} color={colors.primary} />
-                <Text style={{ fontSize: 13, fontWeight: '700', marginTop: 4, color: colors.textPrimary }}>{event.travel.car}m</Text>
-                <Text style={{ fontSize: 10, color: colors.textTertiary, textTransform: 'uppercase' }}>Car</Text>
-              </View>
-              <View style={{ alignItems: 'center' }}>
-                <Ionicons name="bicycle" size={24} color={colors.primary} />
-                <Text style={{ fontSize: 13, fontWeight: '700', marginTop: 4, color: colors.textPrimary }}>{event.travel.bike}m</Text>
-                <Text style={{ fontSize: 10, color: colors.textTertiary, textTransform: 'uppercase' }}>Bike</Text>
-              </View>
-              <View style={{ alignItems: 'center' }}>
-                <Ionicons name="bus" size={24} color={colors.primary} />
-                <Text style={{ fontSize: 13, fontWeight: '700', marginTop: 4, color: colors.textPrimary }}>{Math.round(event.travel.car * 1.5)}m</Text>
-                <Text style={{ fontSize: 10, color: colors.textTertiary, textTransform: 'uppercase' }}>Bus</Text>
-              </View>
-              <View style={{ alignItems: 'center' }}>
-                <Ionicons name="walk" size={24} color={colors.primary} />
-                <Text style={{ fontSize: 13, fontWeight: '700', marginTop: 4, color: colors.textPrimary }}>{event.travel.walk}m</Text>
-                <Text style={{ fontSize: 10, color: colors.textTertiary, textTransform: 'uppercase' }}>Walk</Text>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Venue & Location Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>Venue & Location</Text>
+          {/* 2. Venue & Location */}
+          <Text style={[styles.cardLabel, { marginTop: spacing.md }]}>Venue & Location</Text>
           <Text style={styles.venueTitle}>{event.venue}</Text>
+          {event.city && (
+            <Text style={[styles.addressText, { fontWeight: '600', color: colors.primary, marginTop: 2 }]}>
+              {event.city}
+            </Text>
+          )}
           {event.address && event.address !== event.venue && (
             <Text style={styles.addressText}>{event.address}</Text>
           )}
@@ -363,7 +322,7 @@ export const PastorEventDetail = ({ route, navigation }: { route: any; navigatio
                   pitchEnabled={false}
                   rotateEnabled={false}
                 />
-                {/* Custom Marker overlay to bypass Fabric Native Marker bugs */}
+                {/* Custom Marker */}
                 <View style={{ position: 'absolute', top: '50%', left: '50%', marginTop: -16, marginLeft: -12, alignItems: 'center', justifyContent: 'center' }}>
                   <Ionicons name="location" size={32} color={colors.error} />
                 </View>
@@ -373,22 +332,23 @@ export const PastorEventDetail = ({ route, navigation }: { route: any; navigatio
               </View>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.mapsButton} onPress={handleDirections}>
+            <TouchableOpacity style={[styles.mapsButton, { marginVertical: spacing.md }]} onPress={handleDirections}>
               <Ionicons name="navigate-outline" size={18} color="#FFF" />
               <Text style={styles.mapsButtonText}>Get Directions (External Maps)</Text>
             </TouchableOpacity>
           )}
-        </View>
 
-        {/* Description Card */}
-        {event.description && event.description.replace(/--- Travel Estimation ---[\s\S]*/, '').trim() ? (
-          <View style={styles.card}>
-            <Text style={styles.cardLabel}>Description</Text>
-            <Text style={styles.bodyText}>
-              {event.description.replace(/--- Travel Estimation ---[\s\S]*/, '').trim()}
-            </Text>
-          </View>
-        ) : null}
+          {/* 3. Description (if any) */}
+          {event.description && event.description.replace(/--- Travel Estimation ---[\s\S]*/, '').trim() ? (
+            <>
+              <View style={styles.divider} />
+              <Text style={[styles.cardLabel, { marginTop: spacing.md }]}>Description</Text>
+              <Text style={styles.bodyText}>
+                {event.description.replace(/--- Travel Estimation ---[\s\S]*/, '').trim()}
+              </Text>
+            </>
+          ) : null}
+        </View>
 
         {/* Notes Card */}
         {event.notes ? (
@@ -416,21 +376,6 @@ export const PastorEventDetail = ({ route, navigation }: { route: any; navigatio
           </View>
         ) : null}
 
-        {/* Next Leg Action Card */}
-        {nextEvent && (
-          <View style={styles.card}>
-            <Text style={styles.cardLabel}>Next Stop on Itinerary</Text>
-            <Text style={styles.nextEventTitle} numberOfLines={1}>{nextEvent.title}</Text>
-            <Text style={styles.nextEventTime}>Starts at {nextEvent.startTime}</Text>
-            <TouchableOpacity
-              style={styles.plannerLink}
-              onPress={() => navigation.navigate('RoutePlanner', { events: sameDayEvents })}
-            >
-              <Text style={styles.plannerLinkText}>Open Route Itinerary</Text>
-              <Ionicons name="arrow-forward" size={14} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
-        )}
 
         {/* Next Chronological Event Distance Planning Card */}
         {globalNextEvent && (
@@ -452,7 +397,7 @@ export const PastorEventDetail = ({ route, navigation }: { route: any; navigatio
               <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
                 <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
                 <Text style={[styles.timeVal, { marginLeft: 6, fontSize: 13, color: colors.textSecondary }]}>
-                  {globalNextEvent.venue || globalNextEvent.address || 'Location TBD'}
+                  {globalNextEvent.city ? `${globalNextEvent.city} • ` : ''}{globalNextEvent.venue || globalNextEvent.address || 'Location TBD'}
                 </Text>
               </View>
             </View>
@@ -460,52 +405,28 @@ export const PastorEventDetail = ({ route, navigation }: { route: any; navigatio
             {nextEventTravel.loading ? (
               <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.md }} />
             ) : (
-              <View style={{ gap: spacing.sm }}>
-                  <View style={{ backgroundColor: `${colors.primary}10`, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: `${colors.primary}30`, marginBottom: spacing.xs }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, justifyContent: 'center' }}>
-                      <Ionicons name="navigate-circle" size={18} color={colors.primary} />
-                      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary, textTransform: 'uppercase', marginLeft: 6, letterSpacing: 0.5 }}>
-                        Current Event to Next Event
+              <View style={{ gap: spacing.md, marginTop: spacing.md }}>
+                  <View>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: 6, marginLeft: 4 }}>
+                      {event.city ? `${event.city} (${event.venue || 'Event'})` : event.venue || 'Current'} <Ionicons name="arrow-forward" size={10} /> {globalNextEvent.city ? `${globalNextEvent.city} (${globalNextEvent.venue || 'Event'})` : globalNextEvent.venue || 'Next'}
+                    </Text>
+                    <View style={[styles.travelBadge, { justifyContent: 'flex-start', paddingHorizontal: 12 }]}>
+                      <Ionicons name="car" size={16} color={colors.primary} />
+                      <Text style={[styles.travelBadgeText, { fontSize: 13, marginLeft: 8 }]}>
+                        {nextEventTravel.currentToNextKm.toFixed(1)} km • {nextEventTravel.currentToNextMins >= 60 ? `${Math.floor(nextEventTravel.currentToNextMins / 60)}h ${nextEventTravel.currentToNextMins % 60}m` : `${nextEventTravel.currentToNextMins}m`} travel
                       </Text>
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF', paddingVertical: 8, borderRadius: radius.sm, borderWidth: 1, borderColor: `${colors.primary}15` }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }}>
-                        <Ionicons name="map" size={16} color={colors.primaryDark} />
-                        <Text style={{ fontSize: 15, fontWeight: '700', color: colors.textPrimary, marginLeft: 6 }}>
-                          {nextEventTravel.currentToNextKm.toFixed(1)} <Text style={{ fontSize: 11, fontWeight: '500', color: colors.textTertiary }}>km</Text>
-                        </Text>
-                      </View>
-                      <View style={{ width: 1, height: 20, backgroundColor: `${colors.primary}20` }} />
-                      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }}>
-                        <Ionicons name="car" size={18} color={colors.primaryDark} />
-                        <Text style={{ fontSize: 15, fontWeight: '700', color: colors.textPrimary, marginLeft: 6 }}>
-                          {nextEventTravel.currentToNextMins >= 60 ? `${Math.floor(nextEventTravel.currentToNextMins / 60)}h ${nextEventTravel.currentToNextMins % 60}m` : `${nextEventTravel.currentToNextMins}m`}
-                        </Text>
-                      </View>
                     </View>
                   </View>
                 
-                  <View style={{ backgroundColor: `${colors.primary}10`, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: `${colors.primary}30` }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, justifyContent: 'center' }}>
+                  <View>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: 6, marginLeft: 4 }}>
+                      {homeLocation?.name || 'Home'} <Ionicons name="arrow-forward" size={10} /> {globalNextEvent.city ? `${globalNextEvent.city} (${globalNextEvent.venue || 'Event'})` : globalNextEvent.venue || 'Next'}
+                    </Text>
+                    <View style={[styles.travelBadge, { justifyContent: 'flex-start', paddingHorizontal: 12 }]}>
                       <Ionicons name="home" size={16} color={colors.primary} />
-                      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary, textTransform: 'uppercase', marginLeft: 6, letterSpacing: 0.5 }}>
-                        Home to Next Event
+                      <Text style={[styles.travelBadgeText, { fontSize: 13, marginLeft: 8 }]}>
+                        {nextEventTravel.homeToNextKm.toFixed(1)} km • {nextEventTravel.homeToNextMins >= 60 ? `${Math.floor(nextEventTravel.homeToNextMins / 60)}h ${nextEventTravel.homeToNextMins % 60}m` : `${nextEventTravel.homeToNextMins}m`} travel
                       </Text>
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF', paddingVertical: 8, borderRadius: radius.sm, borderWidth: 1, borderColor: `${colors.primary}15` }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }}>
-                        <Ionicons name="map" size={16} color={colors.primaryDark} />
-                        <Text style={{ fontSize: 15, fontWeight: '700', color: colors.textPrimary, marginLeft: 6 }}>
-                          {nextEventTravel.homeToNextKm.toFixed(1)} <Text style={{ fontSize: 11, fontWeight: '500', color: colors.textTertiary }}>km</Text>
-                        </Text>
-                      </View>
-                      <View style={{ width: 1, height: 20, backgroundColor: `${colors.primary}20` }} />
-                      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }}>
-                        <Ionicons name="car" size={18} color={colors.primaryDark} />
-                        <Text style={{ fontSize: 15, fontWeight: '700', color: colors.textPrimary, marginLeft: 6 }}>
-                          {nextEventTravel.homeToNextMins >= 60 ? `${Math.floor(nextEventTravel.homeToNextMins / 60)}h ${nextEventTravel.homeToNextMins % 60}m` : `${nextEventTravel.homeToNextMins}m`}
-                        </Text>
-                      </View>
                     </View>
                   </View>
               </View>
@@ -641,18 +562,43 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md
   },
   mapsButton: {
+    backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: radius.sm,
-    paddingVertical: 10,
-    gap: 6
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: radius.full,
+    marginTop: spacing.sm
   },
   mapsButtonText: {
     color: '#FFF',
-    fontSize: 13,
-    fontWeight: '600'
+    fontSize: 15,
+    fontWeight: '600',
+    marginLeft: 8
+  },
+  travelBadge: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: `${colors.primary}15`,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: `${colors.primary}30`
+  },
+  travelBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primaryDark,
+    marginLeft: 4
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.md,
   },
   bodyText: {
     fontSize: 13,

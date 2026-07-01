@@ -18,21 +18,39 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { sendToGroq, Message, EventDraft, transcribeAudio } from '../../../services/groqApi';
 import EventConfirmationCard from '../../../components/EventConfirmationCard';
+import EventSuccessCard from '../../../components/EventSuccessCard';
 import SalesforceService from '../../../services/SalesforceService';
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 
 let globalActiveRecording: Audio.Recording | null = null;
+const parseSafeDate = (dStr: string) => {
+  let s = dStr.replace(' ', 'T');
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? new Date() : d;
+};
 
 export default function AIAssistantModal({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: "Hi Pastor! I'm ready to help you create an event. What are we planning?" }
+    { role: 'assistant', content: "🙏 Hello Pastor! I can help you create an event. What are we planning?" }
   ]);
+  const [selectedLang, setSelectedLang] = useState<'en' | 'te'>('en');
+
+  useEffect(() => {
+    if (messages.length === 1 && messages[0].role === 'assistant') {
+      if (selectedLang === 'te') {
+        setMessages([{ role: 'assistant', content: "🙏 ఓ పాస్టర్ గారు! నేను ఈవెంట్‌ను క్రియేట్ చేయడానికి మీకు సహాయం చేయగలను. మనం ఏమి ప్లాన్ చేస్తున్నాము?" }]);
+      } else {
+        setMessages([{ role: 'assistant', content: "🙏 Hello Pastor! I can help you create an event. What are we planning?" }]);
+      }
+    }
+  }, [selectedLang]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [draft, setDraft] = useState<EventDraft>({});
   const [isConfirmationReady, setIsConfirmationReady] = useState(false);
+  const [isSuccessVisible, setIsSuccessVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -83,33 +101,61 @@ export default function AIAssistantModal({ navigation }: { navigation: any }) {
         }
       }
       setSpeakingMessageIndex(index);
+
+      // Clean the text before speaking — strip updateDraft tags and emojis that break TTS
+      const cleanText = text
+        .replace(/<updateDraft>[\s\S]*?<\/updateDraft>/gi, '')
+        .replace(/<[^>]+>/g, '')
+        .replace(/[\u{1F300}-\u{1FFFF}]/gu, '')
+        .trim();
       
-      const targetLang = containsTelugu(text) ? 'te-IN' : 'en-US';
-      const voices = await Speech.getAvailableVoicesAsync();
-      const availableVoices = voices.filter(v => v.language.startsWith(targetLang.split('-')[0]));
+      if (!cleanText) return;
       
-      const maleNames = ['alex', 'daniel', 'aaron', 'fred', 'rishi', 'arthur', 'bruce'];
-      const isMale = (v: any) => v.name && (v.name.toLowerCase().includes('male') || maleNames.some(name => v.name.toLowerCase().includes(name)));
-      
-      let bestVoice = availableVoices.find(v => isMale(v) && v.quality === Speech.VoiceQuality.Enhanced) 
-                   || availableVoices.find(v => isMale(v))
-                   || availableVoices.find(v => v.quality === Speech.VoiceQuality.Enhanced) 
-                   || availableVoices[0];
+      const isTelugu = containsTelugu(cleanText) || selectedLang === 'te';
+      const targetLang = isTelugu ? 'te-IN' : 'en-US';
       
       const options: any = {
         language: targetLang,
         pitch: 1.0,
-        rate: 0.95,
+        rate: 0.9,
+        volume: 1.0,
         onDone: () => setSpeakingMessageIndex(null),
         onStopped: () => setSpeakingMessageIndex(null),
-        onError: () => setSpeakingMessageIndex(null),
+        onError: (err: any) => {
+          console.error("Speech Error:", err);
+          setSpeakingMessageIndex(null);
+        },
       };
+
+      if (isTelugu) {
+        // Check if a Telugu voice is available; log a warning if not
+        const voices = await Speech.getAvailableVoicesAsync();
+        const teluguVoice = voices.find(v => v.language && v.language.toLowerCase().startsWith('te'));
+        if (teluguVoice) {
+          options.voice = teluguVoice.identifier;
+        } else {
+          console.warn('No Telugu voice found on this device. Install a Telugu TTS engine from device settings.');
+          // Still try with language code — Android may use a generic fallback
+        }
+      } else {
+        const voices = await Speech.getAvailableVoicesAsync();
+        const availableVoices = voices.filter(v => v.language.startsWith('en'));
+        const maleNames = ['alex', 'daniel', 'aaron', 'fred', 'rishi', 'arthur', 'bruce'];
+        const isMale = (v: any) => v.name && (v.name.toLowerCase().includes('male') || maleNames.some(name => v.name.toLowerCase().includes(name)));
+        
+        let bestVoice = availableVoices.find(v => isMale(v) && v.quality === Speech.VoiceQuality.Enhanced) 
+                     || availableVoices.find(v => isMale(v))
+                     || availableVoices.find(v => v.quality === Speech.VoiceQuality.Enhanced) 
+                     || availableVoices[0];
+                     
+        if (bestVoice) {
+          options.voice = bestVoice.identifier;
+        }
+      }
       
-      if (bestVoice) options.voice = bestVoice.identifier;
-      
-      Speech.speak(text, options);
+      Speech.speak(cleanText, options);
     } catch (err) {
-      console.error(err);
+      console.error("Speech catch error:", err);
       setSpeakingMessageIndex(null);
     }
   };
@@ -132,24 +178,27 @@ export default function AIAssistantModal({ navigation }: { navigation: any }) {
     }, 100);
   }, [messages]);
 
-  const checkAndSetConflicts = async () => {
-    if (!draft.startDateTime) return;
+  const checkAndSetConflicts = async (currentDraft: EventDraft = draft): Promise<string[]> => {
+    if (!currentDraft.startDateTime) return [];
     try {
       const { checkScheduleConflicts } = require('../../../utils/schedule');
-      const startMs = new Date(draft.startDateTime).getTime();
+      const startMs = parseSafeDate(currentDraft.startDateTime).getTime();
       const conflicts = await checkScheduleConflicts(
-        draft.startDateTime,
+        currentDraft.startDateTime,
         startMs,
-        draft.durationMinutes || 60
+        currentDraft.durationMinutes || 60
       );
       if (conflicts && conflicts.length > 0) {
-        setConflictWarning(`⚠️ Schedule Conflict: Overlaps with ${conflicts.join(' and ')}`);
+        setConflictWarning(`You already have another event scheduled at this time: ${conflicts.join(', ')}`);
+        return conflicts;
       } else {
         setConflictWarning(null);
+        return [];
       }
     } catch (e) {
       console.warn('Conflict check failed', e);
       setConflictWarning(null);
+      return [];
     }
   };
 
@@ -168,7 +217,9 @@ export default function AIAssistantModal({ navigation }: { navigation: any }) {
       
     if (directConfirm) {
       setMessages([...newMessages, { role: 'assistant', content: "I have prepared the confirmation card for you. Please review the details." }]);
+      setIsLoading(true);
       await checkAndSetConflicts();
+      setIsLoading(false);
       setIsConfirmationReady(true);
       return;
     }
@@ -179,12 +230,14 @@ export default function AIAssistantModal({ navigation }: { navigation: any }) {
 
     try {
       let readyToConfirm = false;
+      const currentConflicts = await checkAndSetConflicts(draft);
+      
       const responseText = await sendToGroq(newMessages, draft, (update: Partial<EventDraft>) => {
         setDraft((prev: EventDraft) => ({ ...prev, ...update }));
         if (update.isReadyForConfirmation) {
           readyToConfirm = true;
         }
-      });
+      }, currentConflicts, selectedLang);
 
       let willConfirm = readyToConfirm;
 
@@ -196,22 +249,14 @@ export default function AIAssistantModal({ navigation }: { navigation: any }) {
         setVoiceState('speaking');
         setSpeakingMessageIndex(newMessages.length);
         
-        const targetLang = containsTelugu(responseText) ? 'te-IN' : 'en-US';
-        const voices = await Speech.getAvailableVoicesAsync();
-        const availableVoices = voices.filter(v => v.language.startsWith(targetLang.split('-')[0]));
-        
-        const maleNames = ['alex', 'daniel', 'aaron', 'fred', 'rishi', 'arthur', 'bruce'];
-        const isMale = (v: any) => v.name && (v.name.toLowerCase().includes('male') || maleNames.some(name => v.name.toLowerCase().includes(name)));
-        
-        let bestVoice = availableVoices.find(v => isMale(v) && v.quality === Speech.VoiceQuality.Enhanced) 
-                     || availableVoices.find(v => isMale(v))
-                     || availableVoices.find(v => v.quality === Speech.VoiceQuality.Enhanced) 
-                     || availableVoices[0];
+        const isTelugu = containsTelugu(responseText) || selectedLang === 'te';
+        const targetLang = isTelugu ? 'te-IN' : 'en-US';
         
         const options: any = {
           language: targetLang,
           pitch: 1.0,
           rate: 0.95,
+          volume: 1.0,
           onDone: () => {
             setSpeakingMessageIndex(null);
             startRecordingFn();
@@ -220,26 +265,55 @@ export default function AIAssistantModal({ navigation }: { navigation: any }) {
             setSpeakingMessageIndex(null);
             if (isVoiceMode) startRecordingFn();
           },
-          onError: () => {
+          onError: (err: any) => {
+            console.error("Auto Speech Error:", err);
             setSpeakingMessageIndex(null);
             if (isVoiceMode) startRecordingFn();
           }
         };
-        
-        if (bestVoice) options.voice = bestVoice.identifier;
-        
-        Speech.speak(responseText, options);
-      }
 
-      // Trigger the confirmation card if the AI signaled it's ready, OR if the user explicitly says yes/confirm to the summary
-      if (willConfirm) {
-        setIsConfirmationReady(true);
-        Speech.stop(); // Ensure absolute silence
+        // Clean text before speaking — strip updateDraft tags and emojis
+        const cleanResponseText = responseText
+          .replace(/<updateDraft>[\s\S]*?<\/updateDraft>/gi, '')
+          .replace(/<[^>]+>/g, '')
+          .replace(/[\u{1F300}-\u{1FFFF}]/gu, '')
+          .trim();
+
+        if (isTelugu) {
+          const voices = await Speech.getAvailableVoicesAsync();
+          const teluguVoice = voices.find(v => v.language && v.language.toLowerCase().startsWith('te'));
+          if (teluguVoice) {
+            options.voice = teluguVoice.identifier;
+          } else {
+            console.warn('No Telugu voice found on this device.');
+          }
+        } else {
+          const voices = await Speech.getAvailableVoicesAsync();
+          const availableVoices = voices.filter(v => v.language.startsWith('en'));
+          
+          const maleNames = ['alex', 'daniel', 'aaron', 'fred', 'rishi', 'arthur', 'bruce'];
+          const isMale = (v: any) => v.name && (v.name.toLowerCase().includes('male') || maleNames.some(name => v.name.toLowerCase().includes(name)));
+          
+          let bestVoice = availableVoices.find(v => isMale(v) && v.quality === Speech.VoiceQuality.Enhanced) 
+                       || availableVoices.find(v => isMale(v))
+                       || availableVoices.find(v => v.quality === Speech.VoiceQuality.Enhanced) 
+                       || availableVoices[0];
+          
+          if (bestVoice) {
+            options.voice = bestVoice.identifier;
+          }
+        }
+        
+        Speech.speak(cleanResponseText, options);
       }
       
     } catch (e: any) {
       console.error(e);
-      Alert.alert("Error", e?.message || "Failed to communicate with AI Assistant.");
+      if (e?.message && e.message.includes('429')) {
+        Alert.alert("Server busy", "The server is currently busy. Please try again in a moment.");
+      } else {
+        Alert.alert("Error", "Could not connect to the assistant. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -267,7 +341,7 @@ export default function AIAssistantModal({ navigation }: { navigation: any }) {
         let hasSpoken = false;
 
         const { recording: newRecording } = await Audio.Recording.createAsync(
-          { ...Audio.RecordingOptionsPresets.HIGH_QUALITY, isMeteringEnabled: true },
+          { ...Audio.RecordingOptionsPresets.LOW_QUALITY, isMeteringEnabled: true },
           (status) => {
             if (status.isRecording && status.metering !== undefined) {
               const isSpeaking = status.metering > -35; 
@@ -292,10 +366,10 @@ export default function AIAssistantModal({ navigation }: { navigation: any }) {
         setIsRecording(true);
         if (isVoiceMode) setVoiceState('listening');
       } catch (createErr: any) {
-        Alert.alert("Recording Error", "Could not start the microphone.");
+        Alert.alert("Microphone Error", "Microphone could not be started.");
       }
     } else {
-      Alert.alert("Permission Required", "Please grant microphone permissions to use voice input.");
+      Alert.alert("Permission Required", "Please grant microphone permission.");
     }
   };
 
@@ -332,7 +406,7 @@ export default function AIAssistantModal({ navigation }: { navigation: any }) {
             globalActiveRecording = null;
 
             if (uri) {
-              const text = await transcribeAudio(uri);
+              const text = await transcribeAudio(uri, selectedLang);
               if (text && text.trim()) {
                 setInputText(text);
                 setLastInputWasVoice(true);
@@ -344,7 +418,11 @@ export default function AIAssistantModal({ navigation }: { navigation: any }) {
             }
           } catch (e: any) {
             console.error(e);
-            Alert.alert("Transcription Error", "Could not transcribe audio.");
+            if (e?.message && e.message.includes('429')) {
+              Alert.alert("Server busy", "The server is currently busy. Please try again in a moment.");
+            } else {
+              Alert.alert("Audio Error", "We could not understand your audio. Please speak again.");
+            }
           }
         }
         setIsTranscribing(false);
@@ -371,17 +449,18 @@ export default function AIAssistantModal({ navigation }: { navigation: any }) {
     try {
       Speech.stop(); // Stop any ongoing speech when user clicks save
       setIsSaving(true);
-      // Ensure valid ISO strings for dates
-      let startDateTimeStr = draft.startDateTime ? new Date(draft.startDateTime).toISOString() : new Date().toISOString();
-      let endDateTimeStr = draft.endDateTime ? new Date(draft.endDateTime).toISOString() : '';
+
+      let startDateTimeStr = draft.startDateTime ? parseSafeDate(draft.startDateTime).toISOString() : new Date().toISOString();
+      let endDateTimeStr = draft.endDateTime ? parseSafeDate(draft.endDateTime).toISOString() : '';
       if (!endDateTimeStr) {
         const d = new Date(startDateTimeStr);
         d.setHours(d.getHours() + 1);
         endDateTimeStr = d.toISOString();
       }
 
-      const fullLocation = draft.address ? `${draft.venueName || ''} — ${draft.address}` : (draft.venueName || '');
-
+      const fullLocation = [draft.venueName, draft.city, draft.address]
+        .filter(Boolean)
+        .join(' — ');
       const payload = {
         Subject: draft.title || 'Untitled Event',
         StartDateTime: startDateTimeStr,
@@ -391,9 +470,9 @@ export default function AIAssistantModal({ navigation }: { navigation: any }) {
       };
       
       await SalesforceService.createPastorEvent(payload);
-      navigation.navigate('Dashboard', { refresh: true });
+      setIsSuccessVisible(true);
     } catch (e: any) {
-      Alert.alert("Error", e?.message || "Failed to save the event.");
+      Alert.alert("Error", "Could not save the event. Please try again.");
     } finally {
       setIsSaving(false);
     }
@@ -410,9 +489,28 @@ export default function AIAssistantModal({ navigation }: { navigation: any }) {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBadge}>
             <Text style={styles.backBadgeText}>Back</Text>
           </TouchableOpacity>
+
+          <View style={styles.langToggleContainer}>
+            <TouchableOpacity 
+              style={[styles.langButton, selectedLang === 'en' && styles.langButtonActive]}
+              onPress={() => setSelectedLang('en')}
+            >
+              <Text style={[styles.langButtonText, selectedLang === 'en' && styles.langButtonTextActive]}>English</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.langButton, selectedLang === 'te' && styles.langButtonActive]}
+              onPress={() => setSelectedLang('te')}
+            >
+              <Text style={[styles.langButtonText, selectedLang === 'te' && styles.langButtonTextActive]}>తెలుగు</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-      {isConfirmationReady ? (
+      {isSuccessVisible ? (
+        <View style={styles.confirmationContainer}>
+          <EventSuccessCard onDone={() => navigation.navigate('Dashboard', { refresh: true })} />
+        </View>
+      ) : isConfirmationReady ? (
         <View style={styles.confirmationContainer}>
           <EventConfirmationCard 
             draft={draft} 
@@ -441,35 +539,58 @@ export default function AIAssistantModal({ navigation }: { navigation: any }) {
                 );
               }
               return (
-                <View 
-                  key={idx} 
-                  style={[
-                    styles.messageBubble, 
-                    msg.role === 'user' ? styles.userBubble : styles.aiBubble
-                  ]}
-                >
-                  {msg.role === 'assistant' && (
-                    <Ionicons name="sparkles" size={14} color={colors.primaryDark} style={{ marginRight: 6, marginTop: 2 }} />
-                  )}
-                  <View style={{ flex: 1 }}>
-                    <Text style={[
-                      styles.messageText, 
-                      msg.role === 'user' ? styles.userText : styles.aiText
-                    ]}>
-                      {msg.content}
-                    </Text>
+                <View key={idx}>
+                  <View 
+                    style={[
+                      styles.messageBubble, 
+                      msg.role === 'user' ? styles.userBubble : styles.aiBubble
+                    ]}
+                  >
+                    {msg.role === 'assistant' && (
+                      <Ionicons name="sparkles" size={14} color={colors.primaryDark} style={{ marginRight: 6, marginTop: 2 }} />
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={[
+                        styles.messageText, 
+                        msg.role === 'user' ? styles.userText : styles.aiText
+                      ]}>
+                        {msg.content}
+                      </Text>
+                    </View>
+                    {msg.role === 'assistant' && (
+                      <TouchableOpacity 
+                        style={{ paddingLeft: 8, justifyContent: 'flex-end', paddingBottom: 2 }}
+                        onPress={() => speakMessage(msg.content || '', idx)}
+                      >
+                        <Ionicons 
+                          name={speakingMessageIndex === idx ? "stop-circle" : "volume-high"} 
+                          size={20} 
+                          color={speakingMessageIndex === idx ? colors.error : colors.primary} 
+                        />
+                      </TouchableOpacity>
+                    )}
                   </View>
-                  {msg.role === 'assistant' && (
-                    <TouchableOpacity 
-                      style={{ paddingLeft: 8, justifyContent: 'flex-end', paddingBottom: 2 }}
-                      onPress={() => speakMessage(msg.content || '', idx)}
-                    >
-                      <Ionicons 
-                        name={speakingMessageIndex === idx ? "stop-circle" : "volume-high"} 
-                        size={20} 
-                        color={speakingMessageIndex === idx ? colors.error : colors.primary} 
-                      />
-                    </TouchableOpacity>
+                  
+                  {/* Suggested actions below the last AI message */}
+                  {!isConfirmationReady && !isLoading && idx === messages.length - 1 && msg.role === 'assistant' && (
+                    <View style={{ flexDirection: 'row', paddingBottom: spacing.sm, paddingLeft: 4, gap: 8, flexWrap: 'wrap', marginTop: -8, marginBottom: spacing.md }}>
+                      {messages.length === 1 && (
+                        <TouchableOpacity 
+                          style={{ backgroundColor: '#FFF', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: colors.primary }}
+                          onPress={() => handleSend("I want to create an event")}
+                        >
+                          <Text style={{ color: colors.primary, fontWeight: '600' }}>Create Event</Text>
+                        </TouchableOpacity>
+                      )}
+                      {draft.isReadyForConfirmation && (
+                        <TouchableOpacity 
+                          style={{ backgroundColor: '#FFF', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: colors.success }}
+                          onPress={() => handleSend("Yes, create it")}
+                        >
+                          <Text style={{ color: colors.success, fontWeight: '600' }}>Yes, create it</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   )}
                 </View>
               );
@@ -611,7 +732,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary
   },
   draftPreviewBar: {
-    backgroundColor: colors.primaryLight,
+    backgroundColor: '#ffffff',
     paddingVertical: 6,
     paddingHorizontal: spacing.md,
     borderTopWidth: 1,
@@ -619,7 +740,7 @@ const styles = StyleSheet.create({
   },
   draftPreviewText: {
     fontSize: 11,
-    color: colors.primaryDark,
+    color: colors.textSecondary,
     fontWeight: '600'
   },
   inputContainer: {
@@ -683,5 +804,30 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 12,
     fontWeight: '500',
-  }
+  },
+  langToggleContainer: {
+    flexDirection: 'row',
+    marginLeft: 'auto',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 20,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  langButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 18,
+  },
+  langButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  langButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  langButtonTextActive: {
+    color: '#fff',
+  },
 });

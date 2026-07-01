@@ -35,6 +35,8 @@ export const CreatePastorEvent = ({ route, navigation }: { route: any; navigatio
 
   const closeAlert = () => setAlertConfig(prev => ({ ...prev, visible: false }));
 
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
+
   // Form State
   const [title, setTitle] = useState('');
   const [eventType, setEventType] = useState('');
@@ -46,8 +48,8 @@ export const CreatePastorEvent = ({ route, navigation }: { route: any; navigatio
     return d;
   });
   const [venue, setVenue] = useState('');
+  const [city, setCity] = useState('');
   const [address, setAddress] = useState('');
-  const [pinCode, setPinCode] = useState('');
   const [description, setDescription] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -92,8 +94,8 @@ export const CreatePastorEvent = ({ route, navigation }: { route: any; navigatio
       }
       
       setVenue(editEvent.venue || '');
+      setCity(editEvent.city || '');
       
-      // Attempt to strip out the venue from the location string if it matches our pattern "Venue — Address"
       let addr = editEvent.address || '';
       if (editEvent.venue && addr.startsWith(`${editEvent.venue} — `)) {
         addr = addr.substring(editEvent.venue.length + 3);
@@ -121,27 +123,25 @@ export const CreatePastorEvent = ({ route, navigation }: { route: any; navigatio
   }, [member]);
 
   const handleNext = () => {
+    setErrors({});
+    let newErrors: { [key: string]: string } = {};
+
     if (step === 1) {
-      if (!title.trim()) {
-        setAlertConfig({ visible: true, title: 'Validation Error', message: 'Please enter an event title.', type: 'warning' });
-        return;
-      }
-      if (endTime <= startTime) {
-        setAlertConfig({ visible: true, title: 'Validation Error', message: 'End Time must be greater than Start Time.', type: 'warning' });
+      if (!title.trim()) newErrors.title = 'Please enter an event title.';
+      if (endTime <= startTime) newErrors.time = 'End Time must be greater than Start Time.';
+      
+      if (Object.keys(newErrors).length > 0) {
+        setErrors(newErrors);
         return;
       }
       setStep(2);
     } else if (step === 2) {
-      if (!venue.trim()) {
-        setAlertConfig({ visible: true, title: 'Validation Error', message: 'Please enter a venue name.', type: 'warning' });
-        return;
-      }
-      if (!address.trim()) {
-        setAlertConfig({ visible: true, title: 'Validation Error', message: 'Please enter a full address for maps integration.', type: 'warning' });
-        return;
-      }
-      if (!pinCode.trim()) {
-        setAlertConfig({ visible: true, title: 'Validation Error', message: 'Please enter a PIN Code to ensure location accuracy.', type: 'warning' });
+      if (!venue.trim()) newErrors.venue = 'Please enter a venue name.';
+      if (!city.trim()) newErrors.city = 'Please enter a Town / Village.';
+      if (!address.trim()) newErrors.address = 'Please enter a full address for maps integration.';
+      
+      if (Object.keys(newErrors).length > 0) {
+        setErrors(newErrors);
         return;
       }
       setStep(3);
@@ -153,24 +153,20 @@ export const CreatePastorEvent = ({ route, navigation }: { route: any; navigatio
   };
 
   const handleSave = async () => {
-    if (!title.trim()) {
-      setAlertConfig({ visible: true, title: 'Validation Error', message: 'Please enter an event title.', type: 'warning' });
-      return;
-    }
-    if (!venue.trim()) {
-      setAlertConfig({ visible: true, title: 'Validation Error', message: 'Please enter a venue name.', type: 'warning' });
-      return;
-    }
-    if (!address.trim()) {
-      setAlertConfig({ visible: true, title: 'Validation Error', message: 'Please enter a full address for maps integration.', type: 'warning' });
-      return;
-    }
-    if (!pinCode.trim()) {
-      setAlertConfig({ visible: true, title: 'Validation Error', message: 'Please enter a PIN Code to ensure location accuracy.', type: 'warning' });
-      return;
-    }
-    if (endTime <= startTime) {
-      setAlertConfig({ visible: true, title: 'Validation Error', message: 'End Time must be greater than Start Time.', type: 'warning' });
+    setErrors({});
+    let newErrors: { [key: string]: string } = {};
+
+    if (!title.trim()) newErrors.title = 'Please enter an event title.';
+    if (!venue.trim()) newErrors.venue = 'Please enter a venue name.';
+    if (!city.trim()) newErrors.city = 'Please enter a Town / Village.';
+    if (!address.trim()) newErrors.address = 'Please enter a full address for maps integration.';
+    if (endTime <= startTime) newErrors.time = 'End Time must be greater than Start Time.';
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      // Determine which step has errors to navigate back to it
+      if (newErrors.title || newErrors.time) setStep(1);
+      else if (newErrors.venue || newErrors.city || newErrors.address) setStep(2);
       return;
     }
 
@@ -193,16 +189,16 @@ export const CreatePastorEvent = ({ route, navigation }: { route: any; navigatio
       const endDateTime = new Date(startDateTime.getTime() + durationMinsNum * 60 * 1000);
 
       // Build full address with PIN code for geocoding
-      const fullAddress = pinCode
-        ? `${address.trim()}, ${pinCode.trim()}`
-        : address.trim();
+      const fullLocation = [venue.trim(), city.trim(), address.trim()]
+        .filter(Boolean)
+        .join(' — ');
 
       // Construct Salesforce Event payload — only standard fields that definitely exist
       const payload: any = {
         Subject: title,
         StartDateTime: startDateTime.toISOString(),
         EndDateTime: endDateTime.toISOString(),
-        Location: `${venue.trim()} — ${fullAddress}`,
+        Location: fullLocation,
         Description: `${description.trim()}${notes.trim() ? `\n\nNotes: ${notes.trim()}` : ''}`,
       };
 
@@ -255,7 +251,7 @@ export const CreatePastorEvent = ({ route, navigation }: { route: any; navigatio
           setAlertConfig({
             visible: true,
             title: 'Schedule Conflict',
-            message: `This event overlaps with existing events:\n\n${conflicts.join('\n')}\n\nAre you sure you want to double-book?`,
+            message: `You already have another event scheduled at this exact same time:\n\n${conflicts.join('\n')}\n\nAre you sure you want to double-book?`,
             type: 'warning',
             buttons: [
               { text: 'Cancel', style: 'cancel', onPress: () => { setLoading(false); closeAlert(); } },
@@ -301,7 +297,8 @@ export const CreatePastorEvent = ({ route, navigation }: { route: any; navigatio
             const prevEvent = prevEvents[prevEvents.length - 1];
 
             // Get lat/lng of the NEW event
-            const geoResp = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(fullAddress)}&key=${GOOGLE_KEY}`);
+            const combinedAddress = [address.trim(), city.trim()].filter(Boolean).join(', ');
+            const geoResp = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(combinedAddress)}&key=${GOOGLE_KEY}`);
             const geoData = await geoResp.json();
             
             if (geoData.status === 'OK' && geoData.results.length > 0) {
@@ -405,12 +402,16 @@ export const CreatePastorEvent = ({ route, navigation }: { route: any; navigatio
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Event Title *</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, errors.title && { borderColor: '#ef4444', borderWidth: 1 }]}
                 placeholderTextColor={colors.textTertiary}
                 placeholder="e.g. Sunday Service & Prayer"
                 value={title}
-                onChangeText={setTitle}
+                onChangeText={(text) => {
+                  setTitle(text);
+                  if (errors.title) setErrors({ ...errors, title: '' });
+                }}
               />
+              {errors.title && <Text style={styles.errorText}>{errors.title}</Text>}
             </View>
 
             <View style={styles.inputGroup}>
@@ -470,7 +471,10 @@ export const CreatePastorEvent = ({ route, navigation }: { route: any; navigatio
 
               <View style={[styles.inputGroup, { flex: 1, marginLeft: spacing.md }]}>
                 <Text style={styles.label}>End Time *</Text>
-                <TouchableOpacity style={styles.dropdown} onPress={() => setShowEndTimePicker(true)}>
+                <TouchableOpacity 
+                  style={[styles.dropdown, errors.time && { borderColor: '#ef4444', borderWidth: 1 }]} 
+                  onPress={() => setShowEndTimePicker(true)}
+                >
                   <Text style={styles.dropdownText}>
                     {endTime.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true })}
                   </Text>
@@ -484,12 +488,16 @@ export const CreatePastorEvent = ({ route, navigation }: { route: any; navigatio
                     is24Hour={false}
                     onChange={(event, selectedTime) => {
                       setShowEndTimePicker(false);
-                      if (selectedTime) setEndTime(selectedTime);
+                      if (selectedTime) {
+                        setEndTime(selectedTime);
+                        if (errors.time) setErrors({ ...errors, time: '' });
+                      }
                     }}
                   />
                 )}
               </View>
             </View>
+            {errors.time && <Text style={[styles.errorText, { marginTop: -8, marginBottom: 12 }]}>{errors.time}</Text>}
 
             <View style={[styles.inputGroup, { marginTop: spacing.md }]}>
               <Text style={styles.label}>Meeting Length (Calculated)</Text>
@@ -509,38 +517,48 @@ export const CreatePastorEvent = ({ route, navigation }: { route: any; navigatio
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Venue Name *</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, errors.venue && { borderColor: '#ef4444', borderWidth: 1 }]}
                 placeholderTextColor={colors.textTertiary}
-                placeholder="e.g. Calvary Temple, Guntur"
+                placeholder="e.g. Calvary Temple"
                 value={venue}
-                onChangeText={setVenue}
+                onChangeText={(text) => {
+                  setVenue(text);
+                  if (errors.venue) setErrors({ ...errors, venue: '' });
+                }}
               />
+              {errors.venue && <Text style={styles.errorText}>{errors.venue}</Text>}
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Town / Village * (For Live Tracker Landmark)</Text>
+              <TextInput
+                style={[styles.input, errors.city && { borderColor: '#ef4444', borderWidth: 1 }]}
+                placeholderTextColor={colors.textTertiary}
+                placeholder="e.g. Guntur"
+                value={city}
+                onChangeText={(text) => {
+                  setCity(text);
+                  if (errors.city) setErrors({ ...errors, city: '' });
+                }}
+              />
+              {errors.city && <Text style={styles.errorText}>{errors.city}</Text>}
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Full Address * (Used for Maps Routing)</Text>
               <TextInput
-                style={[styles.input, styles.textArea]}
+                style={[styles.input, styles.textArea, errors.address && { borderColor: '#ef4444', borderWidth: 1 }]}
                 placeholderTextColor={colors.textTertiary}
                 placeholder="e.g. Ring Road, Arundelpet, Guntur, AP, 522002"
                 multiline
                 numberOfLines={3}
                 value={address}
-                onChangeText={setAddress}
+                onChangeText={(text) => {
+                  setAddress(text);
+                  if (errors.address) setErrors({ ...errors, address: '' });
+                }}
               />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>PIN Code * (Improves map accuracy)</Text>
-              <TextInput
-                style={styles.input}
-                placeholderTextColor={colors.textTertiary}
-                placeholder="e.g. 522002"
-                keyboardType="numeric"
-                maxLength={10}
-                value={pinCode}
-                onChangeText={setPinCode}
-              />
+              {errors.address && <Text style={styles.errorText}>{errors.address}</Text>}
             </View>
           </View>
         )}
@@ -831,6 +849,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     ...shadow.card
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 12,
+    marginTop: 4,
+    marginLeft: 4
   }
 });
 

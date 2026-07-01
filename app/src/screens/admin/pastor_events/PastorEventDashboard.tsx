@@ -116,19 +116,60 @@ export const PastorEventDashboard = ({ navigation }: { navigation: any }) => {
   });
 
   const [dynamicStats, setDynamicStats] = useState({ km: 0, mins: 0, loading: false });
-  const [currentLocName, setCurrentLocName] = useState('Guntur, AP');
+  const [currentLocName, setCurrentLocName] = useState('');
   const [isGeocoding, setIsGeocoding] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const initLocation = async () => {
+      try {
+        const saved = await getStartingLocation();
+        if (saved && saved.name) {
+          if (isMounted) setCurrentLocName(saved.name);
+        } else {
+          const ipResp = await fetch('http://ip-api.com/json/');
+          const ipData = await ipResp.json();
+          if (ipData && ipData.city) {
+            if (isMounted) setCurrentLocName(ipData.city);
+          }
+        }
+      } catch (e) {}
+    };
+    initLocation();
+    return () => { isMounted = false; };
+  }, []);
 
   useEffect(() => {
     let isActive = true;
 
     const calcStats = async () => {
       setDynamicStats({ km: 0, mins: 0, loading: true });
+      
+      let prevLat = 16.3067; // Fallback
+      let prevLng = 80.4365;
+
+      try {
+        const saved = await getStartingLocation();
+        if (saved && saved.lat && saved.lng && saved.name) {
+          prevLat = saved.lat;
+          prevLng = saved.lng;
+        } else {
+          const ipResp = await fetch('http://ip-api.com/json/');
+          const ipData = await ipResp.json();
+          if (ipData && ipData.lat && ipData.lon) {
+            prevLat = ipData.lat;
+            prevLng = ipData.lon;
+          }
+        }
+      } catch (e) {
+        // Fallback to Guntur if location fails
+      }
+
       const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || '';
       if (!GOOGLE_KEY || filteredEvents.length === 0) {
         if (isActive) {
           setDynamicStats({ km: 0, mins: 0, loading: false });
-          setEnrichedEvents([]);
+          setEnrichedEvents(filteredEvents);
         }
         return;
       }
@@ -136,85 +177,96 @@ export const PastorEventDashboard = ({ navigation }: { navigation: any }) => {
       try {
         let totalKm = 0;
         let totalMins = 0;
-        let prevLat = 16.3067; // Fallback
-        let prevLng = 80.4365;
 
-        try {
-          const saved = await getStartingLocation();
-          if (saved && saved.lat && saved.lng && saved.name) {
-            prevLat = saved.lat;
-            prevLng = saved.lng;
-            setCurrentLocName(saved.name);
-          } else {
-            const ipResp = await fetch('http://ip-api.com/json/');
-            const ipData = await ipResp.json();
-            if (ipData && ipData.lat && ipData.lon) {
-              prevLat = ipData.lat;
-              prevLng = ipData.lon;
-              setCurrentLocName(ipData.city || 'Guntur, AP');
-            }
-          }
-        } catch (e) {
-          // Fallback to Guntur if location fails
-        }
 
         let currentOriginLat = prevLat;
         let currentOriginLng = prevLng;
         let currentOriginName = currentLocName || 'Home';
+        
+        const homeLat = prevLat;
+        const homeLng = prevLng;
+        const homeName = currentOriginName;
+        
         let isFirstValidEvent = true;
+        let currentDayStr = '';
 
         const newEnrichedEvents = [...filteredEvents];
         for (let i = 0; i < newEnrichedEvents.length; i++) {
           const evt = newEnrichedEvents[i];
           if (evt.lat && evt.lng) {
+            if (evt.date !== currentDayStr) {
+              currentDayStr = evt.date;
+              isFirstValidEvent = true;
+              currentOriginLat = homeLat;
+              currentOriginLng = homeLng;
+              currentOriginName = homeName;
+            }
+            
             // Calculate distance from last valid location to current event
             const originStr = `${currentOriginLat},${currentOriginLng}`;
             const destStr = `${evt.lat},${evt.lng}`;
             
-            const cacheKey = `dist_${originStr}_${destStr}`;
-            let distanceValue = 0;
-            let durationValue = 0;
+            const fetchDist = async (orig: string, dest: string) => {
+              const cacheKey = `dist_${orig}_${dest}`;
+              try {
+                const cached = await AsyncStorage.getItem(cacheKey);
+                if (cached) return JSON.parse(cached);
+              } catch (e) {}
+              
+              try {
+                const distResp = await fetch(`https://maps.googleapis.com/maps/api/distancematrix/json?origins=${orig}&destinations=${dest}&key=${GOOGLE_KEY}`);
+                const distData = await distResp.json();
+                if (distData.status === 'OK' && distData.rows[0].elements[0].status === 'OK') {
+                  const el = distData.rows[0].elements[0];
+                  const res = { distance: el.distance.value, duration: el.duration.value };
+                  AsyncStorage.setItem(cacheKey, JSON.stringify(res)).catch(()=>{});
+                  return res;
+                }
+              } catch (e) {}
+              return { distance: 0, duration: 0 };
+            };
             
-            try {
-              const cached = await AsyncStorage.getItem(cacheKey);
-              if (cached) {
-                const parsed = JSON.parse(cached);
-                distanceValue = parsed.distance;
-                durationValue = parsed.duration;
-              }
-            } catch (e) {}
-
-            if (distanceValue === 0) {
-              const distResp = await fetch(`https://maps.googleapis.com/maps/api/distancematrix/json?origins=${originStr}&destinations=${destStr}&key=${GOOGLE_KEY}`);
-              const distData = await distResp.json();
-              if (distData.status === 'OK' && distData.rows[0].elements[0].status === 'OK') {
-                const element = distData.rows[0].elements[0];
-                distanceValue = element.distance.value;
-                durationValue = element.duration.value;
-                
-                try {
-                  await AsyncStorage.setItem(cacheKey, JSON.stringify({ distance: distanceValue, duration: durationValue }));
-                } catch (e) {}
-              }
+            const routeResult = await fetchDist(originStr, destStr);
+            let distanceValue = routeResult.distance;
+            let durationValue = routeResult.duration;
+            
+            let homeDistanceValue = 0;
+            let homeDurationValue = 0;
+            
+            if (!isFirstValidEvent) {
+              const homeOriginStr = `${homeLat},${homeLng}`;
+              const homeRouteResult = await fetchDist(homeOriginStr, destStr);
+              homeDistanceValue = homeRouteResult.distance;
+              homeDurationValue = homeRouteResult.duration;
             }
-            
+
             if (distanceValue > 0) {
+              const travelData: any = {
+                ...evt.travel,
+                distKm: distanceValue / 1000,
+                car: Math.round(durationValue / 60),
+                isHomeToEvent: isFirstValidEvent,
+                originLat: currentOriginLat,
+                originLng: currentOriginLng,
+                originName: currentOriginName
+              };
+              
+              if (!isFirstValidEvent && homeDistanceValue > 0) {
+                travelData.homeDistKm = homeDistanceValue / 1000;
+                travelData.homeCar = Math.round(homeDurationValue / 60);
+                travelData.homeLat = homeLat;
+                travelData.homeLng = homeLng;
+                travelData.homeName = homeName;
+              }
+              
               newEnrichedEvents[i] = {
                 ...evt,
-                travel: {
-                  ...evt.travel,
-                  distKm: distanceValue / 1000,
-                  car: Math.round(durationValue / 60),
-                  isHomeToEvent: isFirstValidEvent,
-                  originLat: currentOriginLat,
-                  originLng: currentOriginLng,
-                  originName: currentOriginName
-                }
+                travel: travelData
               };
               isFirstValidEvent = false;
               currentOriginLat = evt.lat;
               currentOriginLng = evt.lng;
-              currentOriginName = evt.venue || evt.title || 'Previous Location';
+              currentOriginName = evt.city || evt.venue || evt.title || 'Previous Location';
             }
             
             totalKm += distanceValue / 1000;
@@ -269,6 +321,22 @@ export const PastorEventDashboard = ({ navigation }: { navigation: any }) => {
   const totalDistance = dynamicStats.km;
   const totalTravelTimeCar = dynamicStats.mins;
 
+  const formatEventDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const [y, m, d] = parts;
+        const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        return `${days[dateObj.getDay()]} ${d}-${m}-${y}`;
+      }
+      return dateStr;
+    } catch {
+      return dateStr;
+    }
+  };
+
   const renderEventCard = ({ item, index }: { item: PastorEvent, index: number }) => {
     return (
       <TouchableOpacity 
@@ -282,7 +350,7 @@ export const PastorEventDashboard = ({ navigation }: { navigation: any }) => {
         <View style={{ gap: 6, marginBottom: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Ionicons name="calendar-outline" size={14} color={colors.primary} />
-            <Text style={[styles.timeText, { marginLeft: 6 }]}>{item.date}</Text>
+            <Text style={[styles.timeText, { marginLeft: 6 }]}>{formatEventDate(item.date)}</Text>
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -294,7 +362,7 @@ export const PastorEventDashboard = ({ navigation }: { navigation: any }) => {
 
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Ionicons name="hourglass-outline" size={14} color={colors.primary} />
-            <Text style={[styles.timeText, { marginLeft: 6, color: colors.textTertiary }]}>
+            <Text style={[styles.timeText, { marginLeft: 6, color: colors.textSecondary }]}>
               Meeting length: {item.durationMins >= 60 ? `${Math.round(item.durationMins / 60 * 10) / 10} hours` : `${item.durationMins} mins`}
             </Text>
           </View>
@@ -302,22 +370,26 @@ export const PastorEventDashboard = ({ navigation }: { navigation: any }) => {
 
         {/* Venue & Location Section */}
         <View style={{ marginTop: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border }}>
-          <Text style={{ fontSize: 11, fontWeight: '600', color: colors.textTertiary, textTransform: 'uppercase', marginBottom: 4 }}>Venue & Location</Text>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primaryDark, textTransform: 'uppercase', marginBottom: 4 }}>Venue & Location</Text>
           <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textPrimary, marginBottom: 2 }}>{item.venue || 'No venue provided'}</Text>
+          {item.city && (
+            <Text style={{ fontSize: 13, fontWeight: '600', color: colors.primary, marginBottom: 2 }}>{item.city}</Text>
+          )}
           {item.address && item.address !== item.venue && (
             <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 8 }}>{item.address}</Text>
           )}
           <TouchableOpacity 
-            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primaryLight, paddingVertical: 8, paddingHorizontal: 12, borderRadius: radius.sm, alignSelf: 'flex-start', marginTop: 4, marginBottom: 12 }}
-            onPress={() => openInMaps(item.lat || 0, item.lng || 0, item.title, item.address || item.venue)}
+            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderWidth: 1, borderColor: colors.primary, paddingVertical: 8, paddingHorizontal: 12, borderRadius: radius.sm, alignSelf: 'flex-start', marginTop: 4, marginBottom: 12 }}
+            onPress={() => openInMaps(item.lat || 0, item.lng || 0, item.title, [item.venue, item.address, item.city].filter(Boolean).join(', '))}
           >
-            <Ionicons name="navigate-outline" size={16} color={colors.primaryDark} />
-            <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primaryDark, marginLeft: 6 }}>Get Directions</Text>
+            <Ionicons name="navigate-outline" size={16} color={colors.primary} />
+            <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary, marginLeft: 6 }}>Get Directions</Text>
           </TouchableOpacity>
           
           {/* Travel Distance Info - Live Tracker */}
           {item.travel && item.travel.distKm > 0 && item.lat && item.lng && (
             <View style={{ marginTop: 12 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primaryDark, textTransform: 'uppercase', marginBottom: 8 }}>Live Journey Tracker</Text>
               <LiveJourneyTracker
                 home={{ 
                   lat: item.travel.originLat || 15.8281, 
@@ -325,9 +397,17 @@ export const PastorEventDashboard = ({ navigation }: { navigation: any }) => {
                   name: item.travel.originName || (item.travel.isHomeToEvent ? 'Home' : 'Previous Location') 
                 }}
                 destination={{ lat: item.lat, lng: item.lng }}
-                destinationName={(item.address || item.venue || 'Event').split(',')[0].trim()}
+                destinationName={item.city || (item.address || item.venue || 'Event').split(',')[0].trim()}
                 initialDistanceKm={item.travel.distKm}
                 initialDurationMins={item.travel.car}
+                isDisabled={item.section !== 'today'}
+                altHome={(!item.travel.isHomeToEvent && item.travel.homeLat && item.travel.homeLng) ? {
+                  lat: item.travel.homeLat,
+                  lng: item.travel.homeLng,
+                  name: item.travel.homeName || 'Home'
+                } : undefined}
+                altInitialDistanceKm={item.travel.homeDistKm}
+                altInitialDurationMins={item.travel.homeCar || 0}
               />
             </View>
           )}
@@ -352,22 +432,22 @@ export const PastorEventDashboard = ({ navigation }: { navigation: any }) => {
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity 
-            style={styles.actionIconButton}
+            style={[styles.actionIconButton, { backgroundColor: '#FFF', borderWidth: 1, borderColor: colors.primary }]}
             onPress={() => setShowDatePicker(true)}
           >
             <Ionicons name="calendar-outline" size={20} color={colors.primary} />
           </TouchableOpacity>
           <TouchableOpacity 
-            style={[styles.actionIconButton, { backgroundColor: colors.primary, marginLeft: spacing.sm }]}
+            style={[styles.actionIconButton, { backgroundColor: '#FFF', borderWidth: 1, borderColor: colors.primary, marginLeft: spacing.sm }]}
             onPress={() => navigation.navigate('AIAssistant')}
           >
-            <MaterialCommunityIcons name="robot-outline" size={22} color="#FFF" />
+            <MaterialCommunityIcons name="robot-outline" size={22} color={colors.primary} />
           </TouchableOpacity>
           <TouchableOpacity 
-            style={[styles.actionIconButton, { backgroundColor: colors.primary, marginLeft: spacing.sm }]}
+            style={[styles.actionIconButton, { backgroundColor: '#FFF', borderWidth: 1, borderColor: colors.primary, marginLeft: spacing.sm }]}
             onPress={() => navigation.navigate('CreateEvent')}
           >
-            <Ionicons name="add" size={22} color="#FFF" />
+            <Ionicons name="add" size={22} color={colors.primary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -437,15 +517,29 @@ export const PastorEventDashboard = ({ navigation }: { navigation: any }) => {
         <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: 4 }}>
           STARTING FROM
         </Text>
-        <TextInput
-          style={{ backgroundColor: colors.bgSecondary, padding: 8, borderRadius: radius.sm, fontSize: 14, color: colors.textPrimary }}
-          value={currentLocName}
-          onChangeText={setCurrentLocName}
-          onEndEditing={(e) => handleAddressSubmit(e.nativeEvent.text)}
-          placeholder="Type starting address..."
-        />
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TextInput
+            style={{ flex: 1, backgroundColor: colors.bgSecondary, padding: 8, borderRadius: radius.sm, fontSize: 14, color: colors.textPrimary }}
+            value={currentLocName}
+            onChangeText={setCurrentLocName}
+            onSubmitEditing={(e) => handleAddressSubmit(e.nativeEvent.text)}
+            placeholder="Type starting address..."
+            placeholderTextColor={colors.textTertiary}
+          />
+          <TouchableOpacity 
+            style={{ marginLeft: spacing.sm, backgroundColor: colors.primary, paddingHorizontal: spacing.md, paddingVertical: 10, borderRadius: radius.sm }}
+            onPress={() => handleAddressSubmit(currentLocName)}
+            disabled={isGeocoding}
+          >
+            {isGeocoding ? (
+              <ActivityIndicator size="small" color="#FFF" />
+            ) : (
+              <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>Update</Text>
+            )}
+          </TouchableOpacity>
+        </View>
         <Text style={{ fontSize: 10, color: colors.textTertiary, marginTop: 4 }}>
-          {isGeocoding ? 'Updating...' : 'Press Enter to update distances.'}
+          {isGeocoding ? 'Calculating new distances...' : 'Type address and press Update'}
         </Text>
       </View>
 
@@ -727,13 +821,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: colors.primaryLight,
+    backgroundColor: '#FFFFFF',
     marginHorizontal: spacing.lg,
     paddingVertical: 10,
     paddingHorizontal: spacing.md,
     borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.primaryMid,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
     marginVertical: spacing.xs,
     ...shadow.card
   },
@@ -745,7 +839,7 @@ const styles = StyleSheet.create({
   filterBannerText: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.primaryDark
+    color: colors.primary
   },
   clearFilterButton: {
     flexDirection: 'row',

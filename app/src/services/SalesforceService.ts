@@ -1863,15 +1863,26 @@ spfkUchVp71l4aWpCW50lro=
         }
         const duration = startDT && endDT ? Math.round((endDT.getTime() - startDT.getTime()) / 60000) : 60;
         let parsedVenue = r.Location || '';
+        let parsedCity = '';
         let parsedAddress = r.Address__c || r.Location || '';
         
         if (!r.Address__c && r.Location && r.Location.includes(' — ')) {
           const parts = r.Location.split(' — ');
-          parsedVenue = parts[0].trim();
-          parsedAddress = parts.slice(1).join(' — ').trim();
+          if (parts.length >= 3) {
+            parsedVenue = parts[0].trim();
+            parsedCity = parts[1].trim();
+            parsedAddress = parts.slice(2).join(' — ').trim();
+          } else {
+            parsedVenue = parts[0].trim();
+            parsedAddress = parts.slice(1).join(' — ').trim();
+          }
         }
 
-        const coords = await geocode(parsedAddress || parsedVenue);
+        const geocodeQuery = parsedAddress 
+          ? (parsedCity ? `${parsedAddress}, ${parsedCity}` : parsedAddress)
+          : parsedVenue;
+          
+        const coords = await geocode(geocodeQuery);
 
         return {
           id: r.Id,
@@ -1882,6 +1893,7 @@ spfkUchVp71l4aWpCW50lro=
           endTime: endTimeStr,
           durationMins: duration,
           venue: parsedVenue,
+          city: parsedCity,
           address: parsedAddress,
           lat: coords.lat || 0,
           lng: coords.lng || 0,
@@ -1891,7 +1903,7 @@ spfkUchVp71l4aWpCW50lro=
             distKm: 0,
             car: 0,
             bike: 0,
-            walk: 0
+            bus: 0
           }
         };
       }));

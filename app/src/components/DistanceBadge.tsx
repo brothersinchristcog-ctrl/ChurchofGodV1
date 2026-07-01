@@ -14,13 +14,13 @@ export const DistanceBadge = ({ distKm, minutes }: { distKm: number; minutes: nu
   return (
     <View style={{ 
       flexDirection: 'row', alignItems: 'center', gap: 4,
-      backgroundColor: colors.primaryLight, 
-      borderWidth: 1, borderColor: colors.primaryMid || colors.primaryLight,
+      backgroundColor: '#FFF', 
+      borderWidth: 1, borderColor: colors.primary,
       borderRadius: radius.md,
       paddingHorizontal: 10, paddingVertical: 6 
     }}>
-      <Ionicons name="location" size={14} color={colors.primaryDark} />
-      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primaryDark }}>
+      <Ionicons name="location" size={14} color={colors.primary} />
+      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>
         {distKm.toFixed(1)} km · {formatTime(minutes)}
       </Text>
     </View>

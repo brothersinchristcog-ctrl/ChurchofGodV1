@@ -7,7 +7,8 @@ import {
   StyleSheet,
   SafeAreaView,
   StatusBar,
-  TextInput
+  TextInput,
+  ActivityIndicator
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing, radius, typography, shadow } from '../../../theme/Theme';
@@ -24,9 +25,10 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
   const [stops, setStops] = useState<RouteStop[]>([]);
   const [legs, setLegs] = useState<RouteLeg[]>([]);
   const [conflicts, setConflicts] = useState<{ message: string }[]>([]);
-  const [currentLocName, setCurrentLocName] = useState('Guntur, AP');
+  const [currentLocName, setCurrentLocName] = useState('');
   const [currentLoc, setCurrentLoc] = useState<{lat: number, lng: number} | null>(null);
   const [isGeocoding, setIsGeocoding] = useState(false);
+  const [isLocLoading, setIsLocLoading] = useState(true);
 
   // Helper to convert "9:00 AM" or "1:00 PM" into a sortable minutes-since-midnight integer
   const timeToMins = (timeStr: string) => {
@@ -49,7 +51,7 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
   useEffect(() => {
     const fetchInitialLoc = async () => {
       try {
-        setIsGeocoding(true);
+        setIsLocLoading(true);
         const saved = await getStartingLocation();
         if (saved && saved.lat && saved.lng && saved.name) {
           setCurrentLoc({ lat: saved.lat, lng: saved.lng });
@@ -66,7 +68,7 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
       } catch (e) {
         console.log('IP Location failed');
       } finally {
-        setIsGeocoding(false);
+        setIsLocLoading(false);
       }
     };
     fetchInitialLoc();
@@ -97,6 +99,9 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
   };
 
   useEffect(() => {
+    // Don't calculate until we have the starting location loaded
+    if (isLocLoading) return;
+
     const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || '';
     
     // Generate stops list
@@ -161,9 +166,9 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
         if (distKm === 0) distKm = 5.0; // fallback
         if (carMins === 0) carMins = Math.round(distKm * 2); // rough estimate: 2 mins per km
 
-        let duration = carMins;
-        if (mode === 'bike') duration = Math.round(carMins * 2.5);
-        else if (mode === 'walk') duration = Math.round(carMins * 8);
+        let duration = carMins; // car uses Google Maps time directly
+        if (mode === 'bike') duration = Math.round(carMins * 1.35); // ~70-80 km/h vs car 90-100
+        else if (mode === 'bus') duration = Math.round(carMins * 1.7); // ~50-60 km/h + stops
 
         generatedLegs.push({
           distKm: distKm,
@@ -178,7 +183,7 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
 
     calculateDistances();
 
-  }, [mode, events, currentLoc, currentLocName]);
+  }, [mode, events, currentLoc, currentLocName, isLocLoading]);
 
   const handleLaunchGoogleMaps = () => {
     // Collect coordinates for the route
@@ -265,15 +270,36 @@ export const PastorEventRoutePlanner = ({ route, navigation }: { route: any; nav
           <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 8 }}>
             STARTING FROM
           </Text>
-          <TextInput
-            style={{ backgroundColor: colors.bgSecondary, padding: 12, borderRadius: radius.sm, fontSize: 16, color: colors.textPrimary }}
-            value={currentLocName}
-            onChangeText={setCurrentLocName}
-            onEndEditing={(e) => handleAddressSubmit(e.nativeEvent.text)}
-            placeholder="Type starting address..."
-          />
+          {isLocLoading ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: colors.bgSecondary, borderRadius: radius.sm }}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={{ marginLeft: 8, color: colors.textSecondary, fontSize: 14 }}>Loading saved location...</Text>
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TextInput
+                style={{ flex: 1, backgroundColor: colors.bgSecondary, padding: 12, borderRadius: radius.sm, fontSize: 16, color: colors.textPrimary }}
+                value={currentLocName}
+                onChangeText={setCurrentLocName}
+                onSubmitEditing={(e) => handleAddressSubmit(e.nativeEvent.text)}
+                placeholder="Type starting address..."
+                placeholderTextColor={colors.textTertiary}
+              />
+              <TouchableOpacity
+                style={{ marginLeft: spacing.sm, backgroundColor: colors.primary, paddingHorizontal: spacing.md, paddingVertical: 12, borderRadius: radius.sm }}
+                onPress={() => handleAddressSubmit(currentLocName)}
+                disabled={isGeocoding}
+              >
+                {isGeocoding ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>Update</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
           <Text style={{ fontSize: 11, color: colors.textTertiary, marginTop: 4 }}>
-            {isGeocoding ? 'Updating coordinates...' : 'Press Enter on keyboard to lock in your custom start location.'}
+            {isLocLoading ? 'Fetching your saved location...' : isGeocoding ? 'Calculating new route...' : 'Type address and press Update'}
           </Text>
         </View>
 

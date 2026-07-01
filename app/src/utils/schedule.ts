@@ -65,9 +65,8 @@ export const checkScheduleConflicts = async (
       const evtStartMs = parseTime(evt.startTime);
       const evtEndMs = evtStartMs + ((evt.durationMins || 60) * 60000); // fallback 1hr
 
-      // Two intervals [A, B] and [C, D] overlap if A < D and C < B
       if (startMs < evtEndMs && evtStartMs < endMs) {
-        conflicts.push(`${evt.title} (${evt.startTime})`);
+        conflicts.push(`"${evt.title}" on ${evt.date} at ${evt.startTime}`);
       }
     }
 
