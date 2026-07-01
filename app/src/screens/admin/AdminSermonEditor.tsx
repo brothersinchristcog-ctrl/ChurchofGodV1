@@ -185,10 +185,9 @@ export default function AdminSermonEditor() {
         {/* ── Header ── */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => setActiveTab(3)} style={styles.backBtn}>
-            <ChevronLeft size={20} color="#1a2d5a" />
-            <Text style={styles.backBtnTxt}>Sermons</Text>
+            <ArrowLeft size={20} color="#1a2d5a" />
           </TouchableOpacity>
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={styles.headerTitle}>{editingData ? 'Edit Sermon' : 'Add Sermon'}</Text>
             <Text style={styles.headerSub}>YouTube · Audio · Bilingual</Text>
           </View>
@@ -470,12 +469,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f2f7' },
   scroll: { padding: 14, paddingBottom: 100 },
 
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 15, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#c0392b', gap: 10 },
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 15, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerTitle: { fontSize: 17, fontWeight: '800', color: '#1a2d5a' },
   headerSub: { fontSize: 10, color: '#9CA3AF', marginTop: 2 },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 4, paddingHorizontal: 2 },
-  backBtnTxt: { fontSize: 13, fontWeight: '700', color: '#1a2d5a' },
+  backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center' },
 
   modBox: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 15, borderWidth: 0.5, borderColor: '#e5e7eb', elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 3 },
   modHd: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14, padding: 10, marginHorizontal: -16, marginTop: -16, borderTopLeftRadius: 12, borderTopRightRadius: 12, borderBottomWidth: 0.5, borderBottomColor: '#e5e7eb' },

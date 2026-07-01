@@ -25,6 +25,7 @@ export default function AdminPromiseList() {
   
   // Use local date (YYYY-MM-DD) instead of UTC to avoid timezone mismatches
   const todayStr = new Date().toLocaleDateString('en-CA'); 
+  const currentMonthShort = new Date().toLocaleString('default', { month: 'short' });
 
   const handleEdit = (item: DailyPromise) => {
     setEditingData(item);
@@ -218,7 +219,7 @@ export default function AdminPromiseList() {
                 setEditingData({ date: dStr }); 
                 setActiveTab(1); 
               }}>
-                <Text style={styles.mDate}>Apr {d}</Text>
+                <Text style={styles.mDate}>{currentMonthShort} {d}</Text>
                 <Text style={styles.mAdd}>+ Add</Text>
               </TouchableOpacity>
             ))}

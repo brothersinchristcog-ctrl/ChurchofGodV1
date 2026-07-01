@@ -14,7 +14,10 @@ import {
   LogOut,
   Menu,
   Users,
-  Gift
+  Gift,
+  Smartphone,
+  Info,
+  Phone
 } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import Theme from '../theme/Theme';
@@ -35,11 +38,13 @@ import AdminSongEditor from '../screens/admin/AdminSongEditor';
 import AdminMembers from '../screens/admin/AdminMembers';
 import AdminCelebrations from '../screens/admin/AdminCelebrations';
 import PastorEventNavigator from './PastorEventNavigator';
+import AdminAboutUsEditor from '../screens/admin/AdminAboutUsEditor';
+import AdminContactUsEditor from '../screens/admin/AdminContactUsEditor';
 
 const { width } = Dimensions.get('window');
 
 export default function AdminNavigator() {
-  const { signOut, user, member } = useAuth();
+  const { signOut, user, member, setViewMode } = useAuth();
   const [activeTab, setActiveTab] = useState(0);
   const [editingData, setEditingData] = useState(null);
   const [menuExpanded, setMenuExpanded] = useState(false);
@@ -58,13 +63,14 @@ export default function AdminNavigator() {
     { name: 'Prayers', icon: Heart, component: AdminPrayerModeration },
     { name: 'Members', icon: Users, component: AdminMembers },
     { name: 'Celebrations', icon: Gift, component: AdminCelebrations },
-    { name: 'App Preview', icon: Eye, component: AdminAppPreview },
+    { name: 'About Us', icon: Info, component: AdminAboutUsEditor },
+    { name: 'Contact Us', icon: Phone, component: AdminContactUsEditor },
   ];
-
   const ActiveComponent = tabs[activeTab].component;
+  const goBack = () => setActiveTab(0);
 
   return (
-    <AdminTabContext.Provider value={{ activeTab, setActiveTab, editingData, setEditingData }}>
+    <AdminTabContext.Provider value={{ activeTab, setActiveTab, editingData, setEditingData, goBack }}>
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
           <View style={styles.headerTop}>
@@ -115,7 +121,11 @@ export default function AdminNavigator() {
 
               <View style={styles.drawerDivider} />
 
-              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+              <ScrollView 
+                showsVerticalScrollIndicator={false} 
+                style={{ flex: 1 }}
+                contentContainerStyle={{ paddingBottom: 100 }}
+              >
                 <View style={{ paddingVertical: 10 }}>
                   {tabs.map((tab, index) => {
                     const isActive = activeTab === index;
@@ -143,8 +153,18 @@ export default function AdminNavigator() {
                 </View>
               </ScrollView>
 
-              {/* Sign Out Button */}
+              {/* Footer: Member View + Sign Out */}
               <View style={styles.drawerFooter}>
+                <TouchableOpacity
+                  style={styles.memberViewBtn}
+                  onPress={() => {
+                    setViewMode('member');
+                    setMenuExpanded(false);
+                  }}
+                >
+                  <Smartphone size={18} color="#FCD34D" />
+                  <Text style={styles.memberViewTxt}>Member View</Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.drawerSignOutBtn} onPress={signOut}>
                   <Text style={styles.drawerSignOutTxt}>Sign out</Text>
                 </TouchableOpacity>
@@ -220,7 +240,6 @@ const styles = StyleSheet.create({
     width: width * 0.75,
     maxWidth: 340,
     backgroundColor: '#1a2d5a', // Original Navy Blue
-    height: '100%',
     paddingTop: Platform.OS === 'ios' ? 50 : 30, // Safe area top padding
     shadowColor: '#000',
     shadowOffset: { width: 5, height: 0 },
@@ -296,5 +315,22 @@ const styles = StyleSheet.create({
     color: '#fff', 
     fontWeight: '700', 
     fontSize: 15 
+  },
+  memberViewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(252, 211, 77, 0.12)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(252, 211, 77, 0.35)',
+    paddingVertical: 13,
+    borderRadius: 20,
+    marginBottom: 10,
+  },
+  memberViewTxt: {
+    color: '#FCD34D',
+    fontWeight: '800',
+    fontSize: 14,
   }
 });

@@ -4,7 +4,8 @@ import {
   View, 
   Text, 
   ScrollView, 
-  TouchableOpacity, 
+  TouchableOpacity,
+  Pressable,
   Dimensions,
   ActivityIndicator,
   Image,
@@ -42,7 +43,10 @@ import {
   X,
   Phone,
   Mail,
-  Info
+  Info,
+  Shield,
+  ShieldCheck,
+  Check
 } from 'lucide-react-native';
 
 import firestore from '@react-native-firebase/firestore';
@@ -208,17 +212,24 @@ const EventMarquee = ({ events, onEventPress }: { events: any[], onEventPress: (
 
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
-  const { user, signOut } = useAuth();
+  const { user, signOut, viewMode, setViewMode, member: authMember } = useAuth();
   const { mode, isDark, toggleTheme, colors } = useTheme();
-  const [member, setMember] = useState<SalesforceMember | null>(null);
+  const [member, setMember] = useState<SalesforceMember | null>(authMember);
   const [promise, setPromise] = useState<DailyPromise | null>(null);
   const [todayEvents, setTodayEvents] = useState<ScheduleEvent[]>([]);
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
   const [latestSermon, setLatestSermon] = useState<Sermon | null>(null);
   const [latestPrayer, setLatestPrayer] = useState<any | null>(null);
   const [prayerCount, setPrayerCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!authMember); // Skip loading if we already have cached data
   const [refreshing, setRefreshing] = useState(false);
+
+  const userTypeStr = authMember?.userType?.toLowerCase() || '';
+  const isActualAdmin = userTypeStr === 'admin' || 
+                        userTypeStr === 'pastor' || 
+                        userTypeStr === 'system administrator' || 
+                        userTypeStr.includes('admin') || 
+                        userTypeStr.includes('pastor');
 
   const [promiseThumbnail, setPromiseThumbnail] = useState<string | null>(null);
   const [carouselSlide, setCarouselSlide] = useState(0); // 0 = text, 1 = image
@@ -657,6 +668,19 @@ export default function HomeScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {isActualAdmin && viewMode === 'member' && (
+        <Pressable 
+          style={({ pressed }) => [
+            styles.adminFloatingBtn,
+            pressed && { backgroundColor: 'rgba(26, 45, 90, 0.45)', borderColor: 'rgba(252,211,77,0.6)' }
+          ]} 
+          onPress={() => setViewMode('admin')}
+        >
+          <ShieldCheck size={20} color="#FCD34D" style={{ marginRight: 8 }} />
+          <Text style={styles.adminBtnText}>Admin View</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -1092,5 +1116,32 @@ const styles = StyleSheet.create({
   detailText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  adminFloatingBtn: {
+    position: 'absolute',
+    bottom: 130,
+    right: 20,
+    backgroundColor: '#1a2d5a',
+    borderRadius: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    elevation: 10,
+    zIndex: 9999,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    borderWidth: 1.5,
+    borderColor: 'rgba(252,211,77,0.35)',
+  },
+  adminBtnIconBg: {
+    marginRight: 8,
+  },
+  adminBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

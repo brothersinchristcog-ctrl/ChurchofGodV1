@@ -22,6 +22,8 @@ export default function AdminEventList() {
   const { setActiveTab, setEditingData } = useContext(AdminTabContext);
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAllPastEvents, setShowAllPastEvents] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'upcoming' | 'past'>('all');
 
   useEffect(() => {
     fetchEvents();
@@ -41,8 +43,12 @@ export default function AdminEventList() {
   };
 
   const today = new Date().toISOString().split('T')[0];
-  const upcomingCount = events.filter(e => e.date >= today).length;
-  const pastCount = events.filter(e => e.date < today).length;
+  const upcomingEvents = events.filter(e => e.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+  const pastEvents = events.filter(e => e.date < today).sort((a, b) => b.date.localeCompare(a.date));
+  
+  const upcomingCount = upcomingEvents.length;
+  const pastCount = pastEvents.length;
+  const displayedPastEvents = showAllPastEvents ? pastEvents : pastEvents.slice(0, 5);
 
   const formatDate = (sfDate: string) => {
     if (!sfDate) return '';
@@ -79,7 +85,7 @@ export default function AdminEventList() {
 
   const handleEdit = (event: any) => {
     setEditingData(event);
-    setActiveTab(8); // Switch to Event Editor tab
+    setActiveTab(9); // Switch to Event Editor tab (index 9)
   };
 
   const handleDelete = (id: string, name: string) => {
@@ -114,6 +120,51 @@ export default function AdminEventList() {
     );
   }
 
+  const renderEventCard = (event: any, idx: number, isUpcoming: boolean) => (
+    <View key={event.id} style={[styles.eventItem, isUpcoming && idx === 0 && styles.featuredItem]}>
+      <TouchableOpacity style={[styles.eiThumb, { backgroundColor: event.bannerColor || '#1a2d5a' }]} onPress={() => handleEdit(event)}>
+        {event.bannerUrl ? (
+          <Image source={{ uri: event.bannerUrl }} style={styles.eiThumbImg} resizeMode="cover" />
+        ) : (
+          <Text style={styles.eiThumbTxt}>IMG</Text>
+        )}
+      </TouchableOpacity>
+      <View style={styles.eiBody}>
+        <Text style={styles.eiTitle} numberOfLines={1}>{event.name || 'No Title'}</Text>
+        <Text style={styles.eiTe} numberOfLines={1}>{event.titleTe || ''}</Text>
+        <View style={styles.eiMetaRow}>
+          <Calendar size={10} color="#c0392b" />
+          <Text style={[styles.eiMetaTxt, { color: '#c0392b', fontWeight: '600' }]}>{formatDate(event.date)}</Text>
+          
+          <Clock size={10} color="#6B7280" style={{ marginLeft: 8 }} />
+          <Text style={styles.eiMetaTxt}>
+            {formatDisplayTime(event.startTime)}
+            {event.endTime ? ` — ${formatDisplayTime(event.endTime)}` : ''}
+          </Text>
+        </View>
+        <View style={styles.eiMetaRow}>
+          <MapPin size={10} color="#6B7280" />
+          <Text style={styles.eiMetaTxt} numberOfLines={1}>{event.venueEn || event.location || 'No Venue'}</Text>
+        </View>
+        <View style={styles.eiFoot}>
+          {event.status?.toLowerCase().includes('dra') ? (
+            <View style={[styles.badgeDraft, { flexShrink: 1 }]}>
+              <Text style={styles.badgeDraftTxt} numberOfLines={1}>DRAFT</Text>
+            </View>
+          ) : (
+            <View style={{ flexShrink: 1 }} />
+          )}
+          <TouchableOpacity onPress={() => handleDelete(event.id, event.name)} style={{ padding: 4 }}>
+            <Trash2 size={16} color="#ef4444" />
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity onPress={() => handleEdit(event)} style={styles.eiEdit}>
+          <Text style={{ color: '#1a2d5a', fontSize: 10, fontWeight: '800' }}>Edit →</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -125,14 +176,18 @@ export default function AdminEventList() {
             <Text style={styles.secTitle}>📅 Event Manager</Text>
             <Text style={styles.secSub}>Church Gatherings · కూటములు</Text>
           </View>
-          <TouchableOpacity style={styles.newBtn} onPress={() => { setEditingData(null); setActiveTab(8); }}>
+          <TouchableOpacity style={styles.newBtn} onPress={() => { setEditingData(null); setActiveTab(9); }}>
             <Text style={styles.newBtnTxt}>+ New</Text>
           </TouchableOpacity>
         </View>
 
         {/* ── Stats Row ── */}
         <View style={styles.statsRow}>
-          <View style={styles.statCard}>
+          <TouchableOpacity 
+            style={[styles.statCard, activeFilter === 'all' && styles.statCardActive]} 
+            onPress={() => setActiveFilter('all')}
+            activeOpacity={0.7}
+          >
             <Text style={[styles.statNum, { color: '#15803D' }]}>
               {events.filter(e => 
                 !e.status || 
@@ -140,64 +195,61 @@ export default function AdminEventList() {
                 e.status.toLowerCase().includes('act')
               ).length}
             </Text>
-            <Text style={styles.statLbl}>Published</Text>
-          </View>
-          <View style={styles.statCard}>
+            <Text style={styles.statLbl}>Published (All)</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.statCard, activeFilter === 'upcoming' && styles.statCardActive]} 
+            onPress={() => setActiveFilter(activeFilter === 'upcoming' ? 'all' : 'upcoming')}
+            activeOpacity={0.7}
+          >
             <Text style={[styles.statNum, { color: '#c0392b' }]}>{upcomingCount}</Text>
             <Text style={styles.statLbl}>Upcoming</Text>
-          </View>
-          <View style={styles.statCard}>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.statCard, activeFilter === 'past' && styles.statCardActive]} 
+            onPress={() => setActiveFilter(activeFilter === 'past' ? 'all' : 'past')}
+            activeOpacity={0.7}
+          >
             <Text style={[styles.statNum, { color: '#1a2d5a' }]}>{pastCount}</Text>
             <Text style={styles.statLbl}>Past Events</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
-        <Text style={styles.listLabel}>Upcoming events</Text>
+        {(activeFilter === 'all' || activeFilter === 'upcoming') && (
+          <>
+            <Text style={styles.listLabel}>Upcoming events</Text>
+            {upcomingEvents.length > 0 ? (
+              upcomingEvents.map((event, idx) => renderEventCard(event, idx, true))
+            ) : (
+              <Text style={styles.emptyTxt}>No upcoming events found.</Text>
+            )}
+          </>
+        )}
 
-        {events
-          .filter(e => e.date >= today)
-          .map((event, idx) => (
-          <View key={event.id} style={[styles.eventItem, idx === 0 && styles.featuredItem]}>
-            <TouchableOpacity style={[styles.eiThumb, { backgroundColor: event.bannerColor || '#1a2d5a' }]} onPress={() => handleEdit(event)}>
-              {event.bannerUrl ? (
-                <Image source={{ uri: event.bannerUrl }} style={styles.eiThumbImg} resizeMode="cover" />
-              ) : (
-                <Text style={styles.eiThumbTxt}>IMG</Text>
-              )}
-            </TouchableOpacity>
-            <View style={styles.eiBody}>
-              <Text style={styles.eiTitle} numberOfLines={1}>{event.name || 'No Title'}</Text>
-              <Text style={styles.eiTe} numberOfLines={1}>{event.titleTe || ''}</Text>
-              <View style={styles.eiMetaRow}>
-                <Calendar size={10} color="#c0392b" />
-                <Text style={[styles.eiMetaTxt, { color: '#c0392b', fontWeight: '600' }]}>{formatDate(event.date)}</Text>
+        {(activeFilter === 'all' || activeFilter === 'past') && (
+          <>
+            <Text style={[styles.listLabel, { marginTop: activeFilter === 'all' ? 20 : 0 }]}>Past events</Text>
+            
+            {displayedPastEvents.length > 0 ? (
+              <>
+                {displayedPastEvents.map((event, idx) => renderEventCard(event, idx, false))}
                 
-                <Clock size={10} color="#6B7280" style={{ marginLeft: 8 }} />
-                <Text style={styles.eiMetaTxt}>
-                  {formatDisplayTime(event.startTime)}
-                  {event.endTime ? ` — ${formatDisplayTime(event.endTime)}` : ''}
-                </Text>
-              </View>
-              <View style={styles.eiMetaRow}>
-                <MapPin size={10} color="#6B7280" />
-                <Text style={styles.eiMetaTxt} numberOfLines={1}>{event.venueEn || event.location || 'No Venue'}</Text>
-              </View>
-              <View style={styles.eiFoot}>
-                <View style={[event.status?.toLowerCase().includes('dra') ? styles.badgeDraft : styles.badgePub, { flexShrink: 1 }]}>
-                  <Text style={event.status?.toLowerCase().includes('dra') ? styles.badgeDraftTxt : styles.badgePubTxt} numberOfLines={1}>
-                    {(event.status || 'Published').toUpperCase()}
-                  </Text>
-                </View>
-                <TouchableOpacity onPress={() => handleDelete(event.id, event.name)} style={{ padding: 4 }}>
-                  <Trash2 size={16} color="#ef4444" />
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity onPress={() => handleEdit(event)} style={styles.eiEdit}>
-                <Text style={{ color: '#1a2d5a', fontSize: 10, fontWeight: '800' }}>Edit →</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ))}
+                {pastEvents.length > 5 && (
+                  <TouchableOpacity 
+                    style={styles.showMoreBtn} 
+                    onPress={() => setShowAllPastEvents(!showAllPastEvents)}
+                  >
+                    <Text style={styles.showMoreTxt}>
+                      {showAllPastEvents ? 'Show less ↑' : `Show more (${pastEvents.length - 5}) ↓`}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : (
+              <Text style={styles.emptyTxt}>No past events.</Text>
+            )}
+          </>
+        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -217,7 +269,8 @@ const styles = StyleSheet.create({
   newBtnTxt: { color: '#fff', fontSize: 11, fontWeight: '600' },
 
   statsRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
-  statCard: { flex: 1, backgroundColor: '#fff', borderRadius: 10, paddingVertical: 10, alignItems: 'center', borderWidth: 0.5, borderColor: '#e5e7eb' },
+  statCard: { flex: 1, backgroundColor: '#fff', borderRadius: 10, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: '#e5e7eb' },
+  statCardActive: { borderColor: '#FCD34D', backgroundColor: '#FFFBEB' },
   statNum: { fontSize: 22, fontWeight: '600' },
   statLbl: { fontSize: 9, color: '#6B7280', marginTop: 2 },
 
@@ -236,8 +289,10 @@ const styles = StyleSheet.create({
   eiFoot: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, flexWrap: 'wrap', gap: 4 },
   eiEdit: { position: 'absolute', top: 12, right: 12, backgroundColor: '#f1f5f9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, overflow: 'hidden' },
 
-  badgePub: { backgroundColor: '#DCFCE7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
-  badgePubTxt: { color: '#166534', fontSize: 9, fontWeight: '800' },
   badgeDraft: { backgroundColor: '#F1F5F9', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
-  badgeDraftTxt: { color: '#475569', fontSize: 9, fontWeight: '800' }
+  badgeDraftTxt: { color: '#475569', fontSize: 9, fontWeight: '800' },
+  
+  showMoreBtn: { padding: 12, alignItems: 'center', backgroundColor: '#e2e8f0', borderRadius: 8, marginTop: 4 },
+  showMoreTxt: { color: '#334155', fontSize: 12, fontWeight: '700' },
+  emptyTxt: { fontSize: 12, color: '#64748b', fontStyle: 'italic', paddingVertical: 10 }
 });

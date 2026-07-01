@@ -501,12 +501,13 @@ export default function AdminEventEditor() {
 
       {/* ── Page Header ── */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => setActiveTab(7)} style={styles.backBtn}>
-          <ChevronLeft size={20} color="#1a2d5a" />
-          <Text style={styles.backBtnTxt}>Events</Text>
+        <TouchableOpacity onPress={() => setActiveTab(0)} style={styles.backBtn}>
+          <ArrowLeft size={20} color="#1a2d5a" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{editingData ? 'Edit Event' : '+ Create Event'}</Text>
-        <Text style={styles.headerSub}>English + Telugu · RSVP enabled</Text>
+        <View style={{ flex: 1, marginLeft: 10 }}>
+          <Text style={styles.headerTitle}>{editingData ? 'Edit Event' : '+ Create Event'}</Text>
+          <Text style={styles.headerSub}>English + Telugu · RSVP enabled</Text>
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
@@ -937,9 +938,9 @@ export default function AdminEventEditor() {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.backBtn} onPress={() => { resetForm(); setActiveTab(7); }}>
-            <ArrowLeft size={14} color="#1a2d5a" />
-            <Text style={styles.backBtnTxt}>Back to events</Text>
+          <TouchableOpacity style={styles.footerBackBtn} onPress={() => { resetForm(); setActiveTab(0); }}>
+            <ArrowLeft size={16} color="#1a2d5a" />
+            <Text style={styles.footerBackBtnTxt}>Back to promises</Text>
           </TouchableOpacity>
         </View>
 
@@ -953,11 +954,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   scroll: { paddingBottom: 40 },
 
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9', gap: 10 },
-  headerTitle: { fontSize: 17, fontWeight: '800', color: '#1a2d5a', flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  headerTitle: { fontSize: 17, fontWeight: '800', color: '#1a2d5a' },
   headerSub: { fontSize: 11, color: '#64748b', marginTop: 2 },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 4, paddingHorizontal: 2 },
-  backBtnTxt: { fontSize: 13, fontWeight: '700', color: '#1a2d5a' },
+  backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center' },
+  footerBackBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, marginTop: 15 },
+  footerBackBtnTxt: { fontSize: 13, fontWeight: '700', color: '#1a2d5a' },
 
   sectionHeader: { flexDirection: 'row', alignItems: 'center', padding: 10, paddingHorizontal: 20, marginTop: 15, marginBottom: 15 },
   sectionHeaderText: { fontSize: 12, fontWeight: '800', marginLeft: 10, textTransform: 'uppercase', letterSpacing: 0.5 },

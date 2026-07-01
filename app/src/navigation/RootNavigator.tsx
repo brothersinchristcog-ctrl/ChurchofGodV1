@@ -3,10 +3,11 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
 import { Home, Heart, BookOpen, HandCoins, User } from 'lucide-react-native';
-import { ActivityIndicator, View, Text, StyleSheet, Alert, Platform, TouchableOpacity, AppState, Image } from 'react-native';
+import { ActivityIndicator, View, Text, StyleSheet, Alert, Platform, TouchableOpacity, Pressable, AppState, Image } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Lock } from 'lucide-react-native';
+import { Lock, Phone } from 'lucide-react-native';
+import PillNavBar from './PillNavBar';
 
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { ThemeProvider } from '../context/ThemeContext';
@@ -99,48 +100,8 @@ function TabNavigator() {
 
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
-        tabBarIcon: ({ focused }) => {
-          const isSermon = route.name === 'Sermons';
-          const IconComponent = isSermon ? Mic : icons[route.name];
-
-          if (focused) {
-            return (
-              <View style={styles.activePill}>
-                <IconComponent color="#fff" size={20} strokeWidth={2.5} />
-                <Text style={styles.pillText}>{route.name}</Text>
-              </View>
-            );
-          }
-
-          return (
-            <View style={styles.inactiveWrapper}>
-              <IconComponent color="#1a2d5a" size={20} strokeWidth={2} />
-              <Text style={styles.inactiveLabel}>{route.name}</Text>
-            </View>
-          );
-        },
-        tabBarShowLabel: false,
-        tabBarStyle: {
-          backgroundColor: '#cbd5e1', 
-          borderTopWidth: 0,
-          height: 80,
-          paddingHorizontal: 15,
-          position: 'absolute',
-          bottom: Platform.OS === 'ios' ? 45 : 35,
-          left: 15,
-          right: 15,
-          borderRadius: 25,
-          elevation: 20,
-          shadowColor: '#000',
-          shadowOpacity: 0.1,
-          shadowRadius: 10,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        },
-        headerShown: false,
-      })}
+      tabBar={props => <PillNavBar {...props} />}
+      screenOptions={{ headerShown: false }}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Promise" component={PromiseArchiveScreen} /> 
@@ -160,7 +121,7 @@ function TabNavigator() {
 }
 
 function Navigation() {
-  const { user, member, loading } = useAuth();
+  const { user, member, loading, viewMode } = useAuth();
   const navigation = useNavigation();
   const [onboardingComplete, setOnboardingComplete] = React.useState<boolean | null>(null);
   const [showSplash, setShowSplash] = useState(true);
@@ -346,46 +307,69 @@ function Navigation() {
   }
 
   const userTypeStr = member?.userType?.toLowerCase() || '';
-  const isAdmin = userTypeStr === 'admin' || 
-                  userTypeStr === 'pastor' || 
-                  userTypeStr === 'system administrator' || 
-                  userTypeStr.includes('admin') || 
-                  userTypeStr.includes('pastor');
-                  
-  console.log('🧭 [RootNavigator] Evaluated userType:', userTypeStr, '-> isAdmin:', isAdmin);
-  
-  const navigationKey = isAdmin ? 'admin-root' : 'member-root';
+  const isActualAdmin = userTypeStr === 'admin' || 
+                        userTypeStr === 'pastor' || 
+                        userTypeStr === 'system administrator' || 
+                        userTypeStr.includes('admin') || 
+                        userTypeStr.includes('pastor');
+                        
+  const isAdmin = isActualAdmin && viewMode === 'admin';
 
-  return (
-    <Stack.Navigator key={navigationKey} screenOptions={{ headerShown: false }}>
-      {user ? (
-        isAdmin ? (
-          <Stack.Screen name="AdminRoot" component={AdminNavigator} />
-        ) : onboardingComplete ? (
-          <>
-            <Stack.Screen name="Tabs" component={TabNavigator} />
-            <Stack.Screen name="DailyVideo" component={DailyVideoScreen} />
-            <Stack.Screen name="Events" component={EventsScreen} />
-            <Stack.Screen name="Give" component={GivingScreen} />
-            <Stack.Screen name="Sermons" component={SermonsScreen} />
-            <Stack.Screen name="Songs" component={SongsScreen} />
-            <Stack.Screen name="EventDetails" component={EventDetailsScreen} />
-            <Stack.Screen name="Updates" component={UpdatesScreen} />
-            <Stack.Screen name="PrayerWall" component={PrayerWallScreen} />
-            <Stack.Screen name="Bible" component={BibleScreen} />
-            <Stack.Screen name="BibleChapters" component={BibleChaptersScreen} />
-            <Stack.Screen name="BibleReader" component={BibleReaderScreen} />
-            <Stack.Screen name="BiblePlans" component={BiblePlansScreen} />
-            <Stack.Screen name="MemberNotes" component={MemberNotesScreen} />
-            <Stack.Screen name="Members" component={MembersScreen} />
-          </>
-        ) : (
-          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-        )
-      ) : (
+  // Not logged in
+  if (!user) {
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Auth" component={AuthNavigator} />
-      )}
+      </Stack.Navigator>
+    );
+  }
+
+  // Onboarding not complete (guest)
+  if (!onboardingComplete) {
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+      </Stack.Navigator>
+    );
+  }
+
+  const memberStack = (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Tabs" component={TabNavigator} />
+      <Stack.Screen name="DailyVideo" component={DailyVideoScreen} />
+      <Stack.Screen name="Events" component={EventsScreen} />
+      <Stack.Screen name="Give" component={GivingScreen} />
+      <Stack.Screen name="Sermons" component={SermonsScreen} />
+      <Stack.Screen name="Songs" component={SongsScreen} />
+      <Stack.Screen name="EventDetails" component={EventDetailsScreen} />
+      <Stack.Screen name="Updates" component={UpdatesScreen} />
+      <Stack.Screen name="PrayerWall" component={PrayerWallScreen} />
+      <Stack.Screen name="Bible" component={BibleScreen} />
+      <Stack.Screen name="BibleChapters" component={BibleChaptersScreen} />
+      <Stack.Screen name="BibleReader" component={BibleReaderScreen} />
+      <Stack.Screen name="BiblePlans" component={BiblePlansScreen} />
+      <Stack.Screen name="MemberNotes" component={MemberNotesScreen} />
+      <Stack.Screen name="Members" component={MembersScreen} />
     </Stack.Navigator>
+  );
+
+  // For non-admin users — just show member stack
+  if (!isActualAdmin) {
+    return memberStack;
+  }
+
+  // For admin users — pre-render BOTH views, toggle instantly with opacity
+  return (
+    <View style={{ flex: 1 }}>
+      {/* Admin View — always mounted, shown/hidden */}
+      <View style={{ flex: 1, display: isAdmin ? 'flex' : 'none' }}>
+        <AdminNavigator />
+      </View>
+      {/* Member View — always mounted, shown/hidden */}
+      <View style={{ flex: 1, display: isAdmin ? 'none' : 'flex' }}>
+        {memberStack}
+      </View>
+    </View>
   );
 }
 

@@ -33,12 +33,12 @@ import { useTheme } from '../context/ThemeContext';
 import SalesforceService, { SalesforceMember } from '../services/SalesforceService';
 import SecurityService from '../services/SecurityService';
 import * as ImagePicker from 'expo-image-picker';
-import { Lock } from 'lucide-react-native';
+import { Lock, Shield } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
 
 export default function ProfileScreen({ navigation }: any) {
-  const { user, signOut } = useAuth();
+  const { user, signOut, viewMode, setViewMode } = useAuth();
   const { isDark, toggleTheme, colors } = useTheme();
   const [member, setMember] = useState<SalesforceMember | null>(null);
   const [loading, setLoading] = useState(true);
@@ -65,6 +65,13 @@ export default function ProfileScreen({ navigation }: any) {
   const [updating, setUpdating] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
+
+  const userTypeStr = member?.userType?.toLowerCase() || '';
+  const isActualAdmin = userTypeStr === 'admin' || 
+                        userTypeStr === 'pastor' || 
+                        userTypeStr === 'system administrator' || 
+                        userTypeStr.includes('admin') || 
+                        userTypeStr.includes('pastor');
 
   const fetchProfileData = async () => {
     try {
@@ -379,9 +386,19 @@ export default function ProfileScreen({ navigation }: any) {
             iconBg="#fff1f2"
             title="Sign out" 
             sub="Securely exit your account" 
-            isLast 
+            isLast={!isActualAdmin} 
             onPress={signOut}
           />
+          {isActualAdmin && (
+            <MenuItem 
+              icon={<Shield size={20} color="#1a2d5a" />} 
+              iconBg="#e2e8f0"
+              title="Return to Admin Portal" 
+              sub="Switch back to dashboard" 
+              isLast 
+              onPress={() => setViewMode('admin')}
+            />
+          )}
         </View>
 
         <Text style={styles.versionTxt}>Version 1.2.5 · Powered by Salesforce</Text>
